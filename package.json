@@ -1,0 +1,23 @@
+{
+  "name": "fitpet",
+  "version": "0.1.0",
+  "description": "A Claude Code status-line companion that grows from your real-world fitness and reacts to your coding.",
+  "type": "module",
+  "bin": {
+    "fitpet": "src/cli.ts"
+  },
+  "scripts": {
+    "test": "node --test",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc",
+    "fitpet": "node src/cli.ts"
+  },
+  "engines": {
+    "node": ">=23.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.3",
+    "typescript": "^5.7.0"
+  },
+  "license": "MIT"
+}
