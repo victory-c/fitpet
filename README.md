@@ -1,8 +1,14 @@
 # FitPet 🌱
 
+[![CI](https://github.com/victory-c/fitpet/actions/workflows/ci.yml/badge.svg)](https://github.com/victory-c/fitpet/actions/workflows/ci.yml)
+
 A companion that lives in your **Claude Code status line**. It **grows from your real-world
 fitness** (via Garmin) and **reacts to your coding** in real time — a spiritual revival of
 Claude Code's old `/buddy`, but kept alive by your workouts instead of your keystrokes.
+
+<p align="center">
+  <img src="docs/statusline.svg" alt="FitPet status line shown across vitality tiers and reacting to coding events" width="740">
+</p>
 
 ```
 🌱 (•ᴗ•)🌿 ███████░ 87 · All tests passing. Lovely work.

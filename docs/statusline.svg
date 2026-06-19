@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="780" height="350" viewBox="0 0 780 350" role="img" aria-label="FitPet status line across vitality tiers">
+  <rect x="0.5" y="0.5" width="779" height="349" rx="12" fill="#0d1117" stroke="#30363d"/>
+  <!-- title bar -->
+  <path d="M0 12 a12 12 0 0 1 12 -12 h756 a12 12 0 0 1 12 12 v28 h-780 z" fill="#161b22"/>
+  <line x1="0" y1="40" x2="780" y2="40" stroke="#30363d"/>
+  <circle cx="24" cy="20" r="6" fill="#ff5f56"/>
+  <circle cx="44" cy="20" r="6" fill="#ffbd2e"/>
+  <circle cx="64" cy="20" r="6" fill="#27c93f"/>
+  <text x="90" y="25" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" fill="#8b949e">Claude Code — status line</text>
+
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="15">
+    <text x="28" y="70" font-size="12.5" fill="#6e7681" font-style="italic">the FitPet companion, driven by your fitness:</text>
+
+    <text x="28" y="102" fill="#c9d1d9"><tspan>🌱 (•ᴗ•)🌿 </tspan><tspan fill="#3fb950">███████</tspan><tspan fill="#30363d">░</tspan><tspan> 91 · </tspan><tspan fill="#3fb950">Sprout · thriving</tspan></text>
+    <text x="28" y="134" fill="#c9d1d9"><tspan>🌱 (•ᴗ•) </tspan><tspan fill="#56d364">█████</tspan><tspan fill="#30363d">░░░</tspan><tspan> 58 · </tspan><tspan fill="#56d364">Sprout · healthy</tspan></text>
+    <text x="28" y="166" fill="#c9d1d9"><tspan>🌱 (._.) </tspan><tspan fill="#d29922">██</tspan><tspan fill="#30363d">░░░░░░</tspan><tspan> 28 · </tspan><tspan fill="#d29922">Sprout · wilting</tspan></text>
+    <text x="28" y="198" fill="#c9d1d9"><tspan>🌱 (-_-)zzz </tspan><tspan fill="#8b949e">█</tspan><tspan fill="#30363d">░░░░░░░</tspan><tspan> 8 · </tspan><tspan fill="#8b949e">Sprout · dormant</tspan></text>
+
+    <text x="28" y="238" font-size="12.5" fill="#6e7681" font-style="italic">…and reacting to your code (hooks):</text>
+
+    <text x="28" y="270" fill="#c9d1d9"><tspan>🌱 (•ᴗ•)🌿 </tspan><tspan fill="#3fb950">███████</tspan><tspan fill="#30363d">░</tspan><tspan> 91 · </tspan><tspan fill="#7ee787">All tests passing. Lovely work.</tspan></text>
+    <text x="28" y="302" fill="#c9d1d9"><tspan>🌱 (╯°□°)╯ </tspan><tspan fill="#3fb950">███████</tspan><tspan fill="#30363d">░</tspan><tspan> 91 · </tspan><tspan fill="#f85149">context low!</tspan></text>
+  </g>
+</svg>
