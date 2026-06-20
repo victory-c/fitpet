@@ -1,4 +1,4 @@
-// Installer: safely MERGES FitPet's status line + hooks into ~/.claude/settings.json
+// Installer: safely MERGES FitPet's hooks into ~/.claude/settings.json
 // (never clobbers existing keys; backs up first) and copies the /fitpet-sync skill.
 // The merge/unmerge functions are pure so they can be unit-tested.
 
@@ -26,10 +26,6 @@ function cmd(src: string, rel: string): string {
   return `node ${join(src, rel)}`;
 }
 
-export function fitpetStatusLine(src: string): Json {
-  return { type: "command", command: cmd(src, "face.ts") };
-}
-
 const HOOK_MATCHER = "Bash|Edit|Write|MultiEdit|NotebookEdit";
 export function fitpetHookEntries(src: string): Record<string, Json[]> {
   return {
@@ -50,25 +46,12 @@ export interface MergeResult {
   added: string[];
 }
 
-export function mergeSettings(existing: Json, src: string, opts: { force?: boolean } = {}): MergeResult {
+export function mergeSettings(existing: Json, src: string): MergeResult {
   const settings = structuredClone(existing ?? {}) as Json;
   const warnings: string[] = [];
   const added: string[] = [];
 
-  // --- status line ---
-  const sl = settings.statusLine as { command?: unknown } | undefined;
-  if (!sl || isOurs(sl.command, src)) {
-    settings.statusLine = fitpetStatusLine(src);
-    added.push("statusLine");
-  } else if (opts.force) {
-    settings.statusLine = fitpetStatusLine(src);
-    added.push("statusLine (replaced)");
-    warnings.push("Replaced your existing statusLine (--force).");
-  } else {
-    warnings.push("You already have a statusLine; left it in place. Re-run with --force to use FitPet's.");
-  }
-
-  // --- hooks ---
+  // FitPet registers ONLY the coding-event hooks (the desktop window is the face now).
   const hooks = (typeof settings.hooks === "object" && settings.hooks ? settings.hooks : {}) as Record<string, Json[]>;
   for (const [event, entries] of Object.entries(fitpetHookEntries(src))) {
     const arr = Array.isArray(hooks[event]) ? (hooks[event] as Json[]) : [];
@@ -91,12 +74,6 @@ export function mergeSettings(existing: Json, src: string, opts: { force?: boole
 export function unmergeSettings(existing: Json, src: string): { settings: Json; removed: string[] } {
   const settings = structuredClone(existing ?? {}) as Json;
   const removed: string[] = [];
-
-  const sl = settings.statusLine as { command?: unknown } | undefined;
-  if (sl && isOurs(sl.command, src)) {
-    delete settings.statusLine;
-    removed.push("statusLine");
-  }
 
   if (settings.hooks && typeof settings.hooks === "object") {
     const hooks = settings.hooks as Record<string, unknown>;
@@ -168,23 +145,17 @@ export function readSettingsStrict(path: string): Json {
 }
 
 export interface InstallPreview {
-  statusLine: Json | null;
-  statusLineNote?: string;
   hooks: Record<string, Json[]>;
   added: string[];
   warnings: string[];
 }
 
-// A REDACTED dry-run view for `install --print`: shows ONLY FitPet's own proposed additions
-// (every string derived from `src`, our install dir) plus which keys would change. It never
-// echoes any pre-existing statusLine/hook command strings, which can contain tokens.
-export function previewAdditions(existing: Json, src: string, opts: { force?: boolean } = {}): InstallPreview {
-  const { added, warnings } = mergeSettings(existing, src, opts);
-  const sl = existing.statusLine as { command?: unknown } | undefined;
-  const willSetStatusLine = !sl || isOurs(sl.command, src) || Boolean(opts.force);
+// A REDACTED dry-run view for `install --print`: shows ONLY FitPet's own proposed hook
+// additions (every string derived from `src`, our install dir) plus which keys would change.
+// It never echoes any pre-existing hook command strings, which can contain tokens.
+export function previewAdditions(existing: Json, src: string): InstallPreview {
+  const { added, warnings } = mergeSettings(existing, src);
   return {
-    statusLine: willSetStatusLine ? fitpetStatusLine(src) : null,
-    statusLineNote: willSetStatusLine ? undefined : "Existing statusLine left in place (use --force to replace it).",
     hooks: fitpetHookEntries(src),
     added,
     warnings,

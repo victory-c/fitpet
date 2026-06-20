@@ -1,8 +1,9 @@
 {
   "name": "fitpet",
   "version": "0.1.0",
-  "description": "A Claude Code status-line companion that grows from your real-world fitness and reacts to your coding.",
+  "description": "A desktop pixel companion that grows from your real-world fitness (Garmin) and reacts to your coding via Claude Code hooks.",
   "type": "module",
+  "main": "./out/main/index.js",
   "bin": {
     "fitpet": "src/cli.ts"
   },
@@ -10,14 +11,20 @@
     "test": "node --test",
     "typecheck": "tsc --noEmit",
     "build": "tsc",
-    "fitpet": "node src/cli.ts"
+    "fitpet": "node src/cli.ts",
+    "app:dev": "electron-vite dev",
+    "app:build": "electron-vite build",
+    "app:preview": "electron-vite preview"
   },
   "engines": {
     "node": ">=23.6"
   },
   "devDependencies": {
     "@types/node": "^25.9.3",
-    "typescript": "^5.7.0"
+    "electron": "^42.4.1",
+    "electron-vite": "^5.0.0",
+    "typescript": "^5.7.0",
+    "vite": "^7.3.5"
   },
   "license": "MIT"
 }

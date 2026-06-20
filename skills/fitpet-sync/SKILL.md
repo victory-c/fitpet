@@ -1,6 +1,6 @@
 ---
 name: fitpet-sync
-description: Refresh the FitPet status-line companion from the user's recent Garmin fitness data (training load over the last 7 days). Use when the user asks to sync FitPet, or when a SessionStart nudge says FitPet's data is stale.
+description: Refresh the FitPet desktop companion from the user's recent Garmin fitness data (training load over the last 7 days). Use when the user asks to sync FitPet, or when a SessionStart nudge says FitPet's data is stale.
 ---
 
 # Sync FitPet from Garmin

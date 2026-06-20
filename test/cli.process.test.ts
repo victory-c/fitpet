@@ -1,18 +1,17 @@
-// Process-level tests: spawn the REAL node processes (CLI, status line, hooks) the way
+// Process-level tests: spawn the REAL node processes (CLI and hooks) the way
 // Claude Code does, with a throwaway FITPET_HOME, and assert on stdout / persisted state.
 // This catches argv/stdin wiring that pure-function tests can't.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url))); // .../fitpet
 const CLI = join(ROOT, "src", "cli.ts");
-const FACE = join(ROOT, "src", "face.ts");
 const hook = (n: string) => join(ROOT, "src", "hooks", n);
 
 function tempHome(): string {
@@ -38,14 +37,14 @@ test("CLI process: reset + status render the pet", () => {
   }
 });
 
-test("face process: prints a line normally, and a panic tail when context is low", () => {
+test("CLI status leaves a transiently unreadable state file untouched", () => {
   const home = tempHome();
   try {
-    run(CLI, ["reset", "--name", "Tester"], home);
-    const normal = run(FACE, [], home, JSON.stringify({ context_window: { used_percentage: 10 } }));
-    assert.ok(normal.trim().length > 0);
-    const panic = run(FACE, [], home, JSON.stringify({ context_window: { used_percentage: 95 } }));
-    assert.match(panic, /context low!/);
+    run(CLI, ["reset", "--name", "NoClobber"], home);
+    const state = join(home, "state.json");
+    writeFileSync(state, "{ half-written", "utf8");
+    run(CLI, ["status"], home);
+    assert.equal(readFileSync(state, "utf8"), "{ half-written");
   } finally {
     rmSync(home, { recursive: true, force: true });
   }

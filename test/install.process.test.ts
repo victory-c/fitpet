@@ -50,8 +50,8 @@ test("install --repair backs up the corrupt file, then writes valid FitPet setti
     const f = join(dir, "settings.json");
     writeFileSync(f, "not json at all", "utf8");
     run(["install", "--settings", f, "--repair", "--skills-dir", join(dir, "skills")]);
-    const parsed = JSON.parse(readFileSync(f, "utf8")) as { statusLine?: unknown };
-    assert.ok(parsed.statusLine, "fresh settings written");
+    const parsed = JSON.parse(readFileSync(f, "utf8")) as { hooks?: Record<string, unknown> };
+    assert.ok(parsed.hooks?.SessionStart, "fresh settings written with our hooks");
     assert.equal(backups(dir).length, 1, "the corrupt original was backed up");
   } finally {
     rmSync(dir, { recursive: true, force: true });

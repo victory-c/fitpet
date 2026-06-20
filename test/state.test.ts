@@ -53,3 +53,55 @@ test("loadState clamps impossible persisted values into range", async () => {
   rmSync(dir, { recursive: true, force: true });
   delete process.env.FITPET_HOME;
 });
+
+test("loadState fills missing nested objects instead of returning a crashing partial state", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "fitpet-partial-"));
+  process.env.FITPET_HOME = dir;
+  const { loadState, statePath } = await import("../src/state.ts");
+
+  writeFileSync(statePath(), JSON.stringify({ vitality: 42 }), "utf8");
+  const s = loadState();
+  assert.equal(s.vitality, 42);
+  assert.equal(s.pet.name, "Pixel");
+  assert.equal(s.fitness.rollingScore, 30);
+  assert.equal(s.stage, "egg");
+  assert.equal(s.reaction, null);
+
+  rmSync(dir, { recursive: true, force: true });
+  delete process.env.FITPET_HOME;
+});
+
+test("loadState sanitizes malformed nested fields while preserving valid values", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "fitpet-shape-"));
+  process.env.FITPET_HOME = dir;
+  const { loadState, statePath } = await import("../src/state.ts");
+
+  writeFileSync(
+    statePath(),
+    JSON.stringify({
+      pet: { name: "Patchy", species: "pixelcat", personality: "mystery", bornAt: "not a date" },
+      vitality: 999,
+      stage: "dragon",
+      healthyDays: -10,
+      fitness: { rollingScore: -5, windowDays: 0, source: 99, lastSport: "swim" },
+      reaction: { event: "unknown", text: "bad", setAt: "2026-01-01T00:00:00.000Z", ttlSeconds: 90 },
+    }),
+    "utf8",
+  );
+
+  const s = loadState();
+  assert.equal(s.pet.name, "Patchy");
+  assert.equal(s.pet.species, "pixelcat");
+  assert.equal(s.pet.personality, "earnest");
+  assert.equal(s.vitality, 100);
+  assert.equal(s.stage, "egg");
+  assert.equal(s.healthyDays, 0);
+  assert.equal(s.fitness.rollingScore, 0);
+  assert.equal(s.fitness.windowDays, 7);
+  assert.equal(s.fitness.source, null);
+  assert.equal(s.fitness.lastSport, "swim");
+  assert.equal(s.reaction, null);
+
+  rmSync(dir, { recursive: true, force: true });
+  delete process.env.FITPET_HOME;
+});

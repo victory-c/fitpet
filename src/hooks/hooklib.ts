@@ -4,7 +4,7 @@
 
 import { readFileSync } from "node:fs";
 import type { PetState, ReactionEvent } from "../types.ts";
-import { loadState, saveState } from "../state.ts";
+import { readState, saveState } from "../state.ts";
 import { tick } from "../vitality.ts";
 import { applyReaction } from "../reactions.ts";
 
@@ -70,14 +70,23 @@ export function eventForFailure(input: HookInput): ReactionEvent | null {
   return "error";
 }
 
-export function tickAndSave(): PetState {
-  const { state } = tick(loadState(), nowIso());
+function readWritableState(): PetState | null {
+  const read = readState();
+  return !read.ok && read.reason === "unreadable" ? null : read.state;
+}
+
+export function tickAndSave(): PetState | null {
+  const current = readWritableState();
+  if (!current) return null;
+  const { state } = tick(current, nowIso());
   saveState(state);
   return state;
 }
 
-export function reactAndSave(event: ReactionEvent): PetState {
-  const { state } = tick(loadState(), nowIso());
+export function reactAndSave(event: ReactionEvent): PetState | null {
+  const current = readWritableState();
+  if (!current) return null;
+  const { state } = tick(current, nowIso());
   applyReaction(state, event, nowIso());
   saveState(state);
   return state;

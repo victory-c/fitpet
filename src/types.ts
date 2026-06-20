@@ -26,7 +26,7 @@ export type ReactionEvent =
   | "revived"
   | "stale";
 
-// A transient quip shown in the status line until its TTL expires.
+// A transient quip shown in the desktop speech bubble until its TTL expires.
 export interface Reaction {
   text: string;
   face: string;
@@ -41,6 +41,7 @@ export interface FitnessState {
   windowDays: number;
   source: string | null; // which adapter last fed it, e.g. "garmin" | "manual"
   lastActivityAt: string | null; // ISO of the most recent workout seen
+  lastSport?: string | null; // sport of the most recent workout — drives the idle animation
   lastSyncAt: string | null; // ISO of the last successful sync
 }
 

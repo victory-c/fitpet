@@ -11,5 +11,7 @@
     "outDir": "dist",
     "skipLibCheck": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  "comment": "The desktop app (src/desktop) is built by electron-vite, which has its own DOM/Electron types; exclude it here so the engine typecheck stays focused and clean.",
+  "exclude": ["src/desktop"]
 }

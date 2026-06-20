@@ -2,7 +2,7 @@
 // (idempotent), ease vitality toward it, and report which care events fired.
 
 import type { PetState, ReactionEvent } from "./types.ts";
-import type { FitnessSnapshot, FitnessSource } from "./sources/types.ts";
+import type { Activity, FitnessSnapshot, FitnessSource } from "./sources/types.ts";
 import { computeWindowLoad, rollingScoreFromLoad, tick, tierOf, tierRank } from "./vitality.ts";
 
 export interface SyncResult {
@@ -10,10 +10,10 @@ export interface SyncResult {
   events: ReactionEvent[];
 }
 
-function latestActivityDate(snap: FitnessSnapshot): string | null {
-  let latest: string | null = null;
+function latestActivity(snap: FitnessSnapshot): Activity | null {
+  let latest: Activity | null = null;
   for (const a of snap.activities ?? []) {
-    if (a?.date && (!latest || a.date > latest)) latest = a.date;
+    if (a?.date && (!latest || a.date > latest.date)) latest = a;
   }
   return latest;
 }
@@ -31,13 +31,15 @@ export function applySnapshot(
   const load = computeWindowLoad(snap);
   const newScore = rollingScoreFromLoad(load, source.loadGoal);
 
+  const latest = latestActivity(snap);
   const fedState: PetState = {
     ...state,
     fitness: {
       rollingScore: newScore,
       windowDays: snap.windowDays,
       source: source.id,
-      lastActivityAt: latestActivityDate(snap) ?? state.fitness.lastActivityAt,
+      lastActivityAt: latest?.date ?? state.fitness.lastActivityAt,
+      lastSport: latest?.sport ?? state.fitness.lastSport ?? null,
       lastSyncAt: nowIso,
     },
   };

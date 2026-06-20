@@ -31,7 +31,7 @@ export const START_VITALITY = 30;
 
 export const DEFAULT_WINDOW_DAYS = 7;
 
-// How long a quip lingers in the status line before the renderer clears it.
+// How long a quip lingers in the desktop speech bubble before the renderer clears it.
 export const REACTION_TTL_SECONDS = 90;
 
 // SessionStart sync nudge only fires when the last sync is older than this (Phase 3).

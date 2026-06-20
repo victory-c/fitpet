@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 // The fitpet command. Every command loads state, does one thing, saves atomically, and
-// prints a human-readable status. The status line, hooks, and feeder all reuse this engine.
+// prints a human-readable status. The CLI, hooks, desktop window, and feeder all reuse this engine.
 
 import process from "node:process";
 import { readFileSync } from "node:fs";
 
-import { loadState, saveState, defaultState, statePath } from "./state.ts";
+import { readState, saveState, defaultState, statePath } from "./state.ts";
 import { tick, tierOf } from "./vitality.ts";
 import { applySnapshot, pickTopEvent } from "./engine.ts";
 import { ManualSource } from "./sources/manual.ts";
@@ -79,6 +79,15 @@ function setReaction(state: PetState, event: ReactionEvent): void {
   applyReaction(state, event, nowIso());
 }
 
+function readStateForWrite(): PetState | null {
+  const read = readState();
+  if (!read.ok && read.reason === "unreadable") {
+    console.error(`fitpet: ${statePath()} is temporarily unreadable; left it untouched.`);
+    return null;
+  }
+  return read.state;
+}
+
 function renderStatus(s: PetState): string {
   const tier = tierOf(s.vitality);
   const sp = speciesOf(s.pet.species);
@@ -94,16 +103,16 @@ function renderStatus(s: PetState): string {
 
 function usage(): string {
   return [
-    "fitpet — a status-line companion that grows from your fitness",
+    "fitpet — a desktop pixel companion that grows from your fitness",
     "",
-    "  status                          show the pet (advances the sim)",
+    "  status                          print the pet as text (advances the sim; the GUI is the real face)",
     "  tick                            advance the sim (ease + age); never penalizes time",
     "  feed <minutes>                  hand-feed a synthetic workout",
     "  sync [--file <path>]            apply a FitnessSnapshot (--file > stdin > --json); --source --goal",
     "  react <event>                   force a quip for an event",
     "  reset [--name --species --personality]   start a fresh pet",
-    "  install [--force --print --repair]  add the status line + hooks to ~/.claude/settings.json",
-    "  uninstall                       remove FitPet from settings.json (keeps your pet)",
+    "  install [--print --repair]      add FitPet's coding-event hooks to ~/.claude/settings.json",
+    "  uninstall                       remove FitPet's hooks from settings.json (keeps your pet)",
     "  doctor                          show install + state status",
     "  path                            print the state file path",
     "",
@@ -120,9 +129,14 @@ function main(): void {
       // NOTE: these ADVANCE the sim before rendering. loadState() first sanitizes any bad
       // persisted values into range, then tick() eases vitality toward rollingScore — so a
       // corrupted file shows its clamped value already easing toward the target, not frozen.
-      // The status-line `face` command is the pure, no-tick render of the stored value.
-      const { state } = tick(loadState(), nowIso());
-      saveState(state);
+      // The desktop window reads state without advancing the sim; the CLI status command ticks.
+      const read = readState();
+      const { state } = tick(read.state, nowIso());
+      if (read.ok || read.reason === "missing") {
+        saveState(state);
+      } else {
+        console.error(`fitpet: ${statePath()} is temporarily unreadable; left it untouched.`);
+      }
       console.log(renderStatus(state));
       break;
     }
@@ -133,7 +147,12 @@ function main(): void {
         console.error("usage: fitpet feed <minutes>");
         process.exit(1);
       }
-      const { state, events } = applySnapshot(loadState(), ManualSource.normalize(minutes), ManualSource, nowIso());
+      const current = readStateForWrite();
+      if (!current) {
+        process.exit(1);
+        return;
+      }
+      const { state, events } = applySnapshot(current, ManualSource.normalize(minutes), ManualSource, nowIso());
       setReaction(state, pickTopEvent(events) ?? "fed");
       saveState(state);
       console.log(renderStatus(state));
@@ -173,7 +192,12 @@ function main(): void {
         };
       }
 
-      const { state, events } = applySnapshot(loadState(), snap, source, nowIso());
+      const current = readStateForWrite();
+      if (!current) {
+        process.exit(1);
+        return;
+      }
+      const { state, events } = applySnapshot(current, snap, source, nowIso());
       const top = pickTopEvent(events);
       if (top) setReaction(state, top);
       saveState(state);
@@ -190,7 +214,11 @@ function main(): void {
         process.exit(1);
         return;
       }
-      const state = loadState();
+      const state = readStateForWrite();
+      if (!state) {
+        process.exit(1);
+        return;
+      }
       setReaction(state, ev);
       saveState(state);
       console.log(renderStatus(state));
@@ -223,16 +251,15 @@ function main(): void {
     case "install": {
       const settingsPath = getFlag(rest, "settings") ?? defaultSettingsPath();
       const src = srcDir();
-      const force = rest.includes("--force");
 
       if (rest.includes("--print")) {
-        // Dry run: show ONLY FitPet's proposed additions; never echo existing commands.
+        // Dry run: show ONLY FitPet's proposed hook additions; never echo existing commands.
         const existing = loadSettingsForWrite(settingsPath, rest.includes("--repair"));
         if (existing === null) {
           process.exit(1);
           return;
         }
-        console.log(JSON.stringify(previewAdditions(existing, src, { force }), null, 2));
+        console.log(JSON.stringify(previewAdditions(existing, src), null, 2));
         break;
       }
 
@@ -241,16 +268,16 @@ function main(): void {
         process.exit(1);
         return;
       }
-      const { settings, warnings, added } = mergeSettings(existing, src, { force });
+      const { settings, warnings, added } = mergeSettings(existing, src);
       const backup = backupSettings(settingsPath);
       writeSettingsAtomic(settingsPath, settings);
       const skill = installSkill(getFlag(rest, "skills-dir") ?? defaultSkillsDir());
-      console.log("✅ FitPet installed.");
+      console.log("✅ FitPet hooks installed.");
       console.log(`   settings: ${settingsPath}${backup ? `\n   backup:   ${backup}` : ""}`);
       console.log(`   added:    ${added.join(", ") || "nothing new (already installed)"}`);
       console.log(`   skill:    ${skill}`);
       for (const w of warnings) console.log(`   ⚠️  ${w}`);
-      console.log("   → Restart Claude Code to load the status line + hooks.");
+      console.log("   → Restart Claude Code to load the hooks. Run the FitPet window with `npm run app:dev`.");
       break;
     }
 
@@ -272,14 +299,13 @@ function main(): void {
 
     case "doctor": {
       const settingsPath = getFlag(rest, "settings") ?? defaultSettingsPath();
-      const src = srcDir();
-      const s = readSettings(settingsPath) as { statusLine?: { command?: string }; hooks?: Record<string, unknown> };
-      const slOurs = typeof s.statusLine?.command === "string" && s.statusLine.command.includes(src);
+      const s = readSettings(settingsPath) as { hooks?: Record<string, unknown> };
+      const hookEvents = s.hooks ? Object.keys(s.hooks) : [];
+      const fitpetHooks = hookEvents.length > 0; // best-effort: any hooks registered
       console.log("fitpet doctor");
-      console.log(`   state file:        ${statePath()}`);
-      console.log(`   settings file:     ${settingsPath}`);
-      console.log(`   statusLine (ours): ${slOurs ? "installed" : "not installed"}`);
-      console.log(`   hooks:             ${s.hooks ? Object.keys(s.hooks).join(", ") : "none"}`);
+      console.log(`   state file:    ${statePath()}`);
+      console.log(`   settings file: ${settingsPath}`);
+      console.log(`   hooks:         ${fitpetHooks ? hookEvents.join(", ") : "none"}`);
       break;
     }
 
