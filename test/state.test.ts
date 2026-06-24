@@ -54,6 +54,41 @@ test("loadState clamps impossible persisted values into range", async () => {
   delete process.env.FITPET_HOME;
 });
 
+test("readState classifies complete / partial / missing / corrupt", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "fitpet-classify-"));
+  process.env.FITPET_HOME = dir;
+  const { readState, defaultState, saveState, statePath, hasPetIdentity } = await import("../src/state.ts");
+
+  assert.equal((readState() as { reason?: string }).reason, "missing", "no file = new pet");
+
+  saveState(defaultState("2026-06-20T00:00:00.000Z", { name: "Real" }));
+  assert.equal(readState().ok, true, "a full pet reads ok");
+
+  writeFileSync(statePath(), JSON.stringify({ vitality: 42 }), "utf8");
+  const partial = readState();
+  assert.equal(partial.ok, false);
+  assert.equal((partial as { reason: string }).reason, "partial", "parses but missing identity/growth = partial");
+
+  writeFileSync(statePath(), "{ half-written", "utf8");
+  assert.equal((readState() as { reason: string }).reason, "unreadable");
+
+  // old-but-VALID: identity + stage present, growth COUNTERS missing -> ok (migratable, not partial)
+  writeFileSync(
+    statePath(),
+    JSON.stringify({ pet: { name: "Old", bornAt: "2026-05-01T00:00:00.000Z" }, stage: "adult", vitality: 70 }),
+    "utf8",
+  );
+  assert.equal(readState().ok, true, "old schema missing growth counters is migratable, not partial");
+
+  assert.equal(hasPetIdentity({ vitality: 42 }), false);
+  assert.equal(hasPetIdentity({ pet: { name: "x" }, stage: "adult" }), false, "missing bornAt -> suspect");
+  assert.equal(hasPetIdentity({ pet: { name: "x", bornAt: "2026-05-01T00:00:00.000Z" }, stage: "adult" }), true);
+  assert.equal(hasPetIdentity(JSON.parse(JSON.stringify(defaultState("2026-06-20T00:00:00.000Z")))), true);
+
+  rmSync(dir, { recursive: true, force: true });
+  delete process.env.FITPET_HOME;
+});
+
 test("loadState fills missing nested objects instead of returning a crashing partial state", async () => {
   const dir = mkdtempSync(join(tmpdir(), "fitpet-partial-"));
   process.env.FITPET_HOME = dir;

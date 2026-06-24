@@ -81,8 +81,9 @@ function setReaction(state: PetState, event: ReactionEvent): void {
 
 function readStateForWrite(): PetState | null {
   const read = readState();
-  if (!read.ok && read.reason === "unreadable") {
-    console.error(`fitpet: ${statePath()} is temporarily unreadable; left it untouched.`);
+  if (!read.ok && (read.reason === "unreadable" || read.reason === "partial")) {
+    const how = read.reason === "partial" ? "looks incomplete (missing identity/growth)" : "is unreadable";
+    console.error(`fitpet: ${statePath()} ${how}; left it untouched (run \`fitpet reset\` to start fresh).`);
     return null;
   }
   return read.state;
@@ -135,7 +136,7 @@ function main(): void {
       if (read.ok || read.reason === "missing") {
         saveState(state);
       } else {
-        console.error(`fitpet: ${statePath()} is temporarily unreadable; left it untouched.`);
+        console.error(`fitpet: ${statePath()} is incomplete or unreadable; showing it read-only, left it untouched.`);
       }
       console.log(renderStatus(state));
       break;

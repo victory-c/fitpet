@@ -11,6 +11,8 @@ export interface DesktopSnapshot {
   vitality: number;
   rollingScore: number;
   lastSport: string | null;
+  lastActivityAt: string | null;
+  healthyDays: number;
   reaction: { text: string; event: string; setAtMs: number } | null;
 }
 
@@ -24,6 +26,8 @@ export function snapshotFromState(s: PetState, now = new Date().toISOString()): 
     vitality: Math.round(s.vitality),
     rollingScore: Math.round(s.fitness.rollingScore),
     lastSport: s.fitness.lastSport ?? null,
+    lastActivityAt: s.fitness.lastActivityAt ?? null,
+    healthyDays: s.healthyDays,
     reaction:
       live && s.reaction ? { text: s.reaction.text, event: s.reaction.event, setAtMs: Date.parse(s.reaction.setAt) } : null,
   };

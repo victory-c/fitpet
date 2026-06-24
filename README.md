@@ -1,30 +1,37 @@
-# FitPet 🌱
+# FitPet 🦀
 
 [![CI](https://github.com/victory-c/fitpet/actions/workflows/ci.yml/badge.svg)](https://github.com/victory-c/fitpet/actions/workflows/ci.yml)
 
-A **desktop pixel companion** that **grows from your real-world fitness** (via Garmin) and
-**reacts to your coding** in real time — a spiritual revival of Claude Code's old `/buddy`. It's
-a small frameless, transparent, always-on-top window you place over your editor: a pixel
-creature that thrives when you train, wilts when you rest, and pops a speech bubble when your
-tests pass or an error hits.
+Meet **Shelldon** — a pixel hermit crab whose shell is a CRT terminal — a **desktop companion**
+that **grows from your real-world fitness** (via Garmin) and **reacts to your coding** in real
+time, a spiritual revival of Claude Code's old `/buddy`. He lives in a small frameless,
+transparent, always-on-top window over your editor: he thrives (vivid orange, fast heartbeat)
+when you train, greys out and slumps when you rest, and pops a speech bubble + a green/red screen
+flash when your tests pass or fail.
 
 <p align="center">
-  <img src="docs/window.svg" alt="The FitPet window: a speech bubble reading 'All tests passing. Lovely work.' above a thriving pixel sprout" width="240">
+  <img src="docs/window.svg" alt="Shelldon: a pixel hermit crab in a CRT-terminal shell showing a green heartbeat and battery, under a speech bubble reading 'All tests passing!'" width="220">
 </p>
 
 > Honest note: this is an **independent** window you position next to / over Claude Code — it
 > reproduces the *feel* of `/buddy`, not its in-app slot (that's Anthropic's).
 
-## Two independent axes
+## Two surfaces, two timescales
 
-- **Care axis ← fitness.** Your Garmin training load over a rolling 7-day window sets the pet's
-  vitality → **species, tier** (thriving / healthy / wilting / dormant) and **evolution stage**
-  (egg → hatchling → juvenile → adult). It never dies — it goes dormant and a workout revives it.
-- **Reaction axis ← coding.** Claude Code hooks fire short, pre-written quips on events (tests
-  pass/fail, errors, edits, session start) — shown as a **speech bubble** plus a **bounce/shake**
-  animation. Chosen locally, **no model calls**.
-- **Sport layer.** The pet's **idle animation** matches your latest activity — a cycling rock, a
-  running bounce, a swimming sway.
+Shelldon shows two things at once, composed from modular pixel parts (no per-combination frames):
+
+- **Vitality (short-term ← fitness).** Your Garmin training load over a rolling 7-day window eases
+  a 0–100 vitality → **tier** (thriving / healthy / wilting / dormant). It shows redundantly: the
+  crab **tints orange→grey** and slumps, the eyes droop, and the **CRT screen is a vitals monitor**
+  — a heartbeat whose rate/amplitude/colour track vitality, plus a battery bar. Dormant = the CRT
+  goes to **standby**; the next workout reboots him. Fully reversible.
+- **Growth (long-term ← fitness, one-way).** Engine-gated on age + healthy days: Shelldon gets
+  **bigger** and his **shell hardware** upgrades (egg → chunky mono-CRT → colour monitor → flat
+  panel).
+- **Reactions (← coding).** Claude Code hooks write quips into state; the window shows a **speech
+  bubble** + a brief **green/red screen flash**. Templated, **no model calls**.
+- **Sport.** A recent Garmin activity makes Shelldon briefly **perform** it (run / cycle / swim),
+  and the CRT shows a sport readout for a while after.
 
 The pet **grows from your workouts** but **reacts to your code**, and the two never affect each other.
 
@@ -46,7 +53,7 @@ detect events and write reactions into `~/.fitpet/state.json`, which the window 
 git clone <this repo> ~/fitpet && cd ~/fitpet
 npm install                              # deps + the Electron binary
 
-node src/cli.ts reset --name Sprout      # hatch a pet (try --species pixelcat|slime)
+node src/cli.ts reset --name Shelldon    # start a fresh egg
 npm run app:dev                          # open the companion window
 
 node src/cli.ts install                  # add the coding-event hooks to ~/.claude/settings.json
@@ -111,7 +118,7 @@ window's [`index.html`](src/desktop/renderer/index.html).
 
 ## Roadmap
 
-- Per-stage and additional-species sprite art (the vertical slice ships Sprout fully).
+- Art polish: per-stage body proportions (the current build scales one body), more shell decals/stickers.
 - **Optional model-generated speech bubbles** (the original `/buddy` used live commentary) — V1
   stays templated/local; this would be opt-in.
 - **Background growth without a session:** an HTTP/OAuth source (e.g. **WHOOP**) polled by a

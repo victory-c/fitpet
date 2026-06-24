@@ -6,11 +6,11 @@
 import { app, BrowserWindow, ipcMain, screen } from "electron";
 import { fileURLToPath } from "node:url";
 
-import { createSnapshotReader } from "./snapshot";
-import { loadBounds, saveBounds, type Bounds } from "./window-store";
+import { createSnapshotReader } from "./snapshot.ts";
+import { loadBounds, saveBounds, type Bounds } from "./window-store.ts";
 
-const WIDTH = 260;
-const HEIGHT = 300;
+const WIDTH = 300;
+const HEIGHT = 380;
 
 let win: BrowserWindow | null = null;
 let lastJson = "";

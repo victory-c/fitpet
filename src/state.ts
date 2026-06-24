@@ -138,19 +138,56 @@ export function sanitizeState(raw: unknown): PetState {
   };
 }
 
+// A parsed file represents a REAL, resumable pet only if it carries the irreplaceable, ONE-WAY
+// fields: identity (name + bornAt) and the growth LEVEL (stage). The growth COUNTERS
+// (ageDays/healthyDays) are intentionally NOT required here — they are *migratable*:
+// sanitizeState backfills them, and ageDays is recomputed from bornAt on the next tick. So an
+// older schema that predates a counter is upgraded (written once), not bricked; only files that
+// lack identity (e.g. `{"vitality":42}`) are suspect. Checked on the RAW parse, since
+// sanitizeState would otherwise backfill these and hide the difference.
+export function hasPetIdentity(raw: unknown): boolean {
+  if (!raw || typeof raw !== "object") return false;
+  const s = raw as Record<string, unknown>;
+  if (!s.pet || typeof s.pet !== "object") return false;
+  const pet = s.pet as Record<string, unknown>;
+  const isText = (x: unknown): boolean => typeof x === "string" && x.length > 0;
+  const isIso = (x: unknown): boolean => typeof x === "string" && Number.isFinite(new Date(x).getTime());
+  return (
+    isText(pet.name) && // identity
+    isIso(pet.bornAt) && // identity (one-way)
+    typeof s.stage === "string" &&
+    STAGES.has(s.stage) // growth level (one-way)
+  );
+}
+
+// `ok`         = parses AND complete (a real, resumable pet — safe to accept + write over).
+// `partial`    = parses but missing required identity/growth (SUSPECT — render, but never
+//                accept as authoritative and never overwrite).
+// `missing`    = no file (a genuinely new pet — safe to write).
+// `unreadable` = empty or unparseable (suspect — never overwrite).
+// `state` is always the sanitized result, so callers can still render crash-free.
 export type StateReadResult =
   | { ok: true; state: PetState }
-  | { ok: false; reason: "missing" | "unreadable"; state: PetState };
+  | { ok: false; reason: "missing" | "unreadable" | "partial"; state: PetState };
 
 export function readState(): StateReadResult {
+  let text: string;
   try {
-    const text = readFileSync(statePath(), "utf8");
-    if (text.trim() === "") return { ok: false, reason: "unreadable", state: defaultState() };
-    return { ok: true, state: sanitizeState(JSON.parse(text) as unknown) };
+    text = readFileSync(statePath(), "utf8");
   } catch (e) {
     const code = (e as NodeJS.ErrnoException)?.code;
     return { ok: false, reason: code === "ENOENT" ? "missing" : "unreadable", state: defaultState() };
   }
+  if (text.trim() === "") return { ok: false, reason: "unreadable", state: defaultState() };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return { ok: false, reason: "unreadable", state: defaultState() };
+  }
+  const state = sanitizeState(parsed);
+  if (!hasPetIdentity(parsed)) return { ok: false, reason: "partial", state };
+  return { ok: true, state };
 }
 
 export function loadState(): PetState {

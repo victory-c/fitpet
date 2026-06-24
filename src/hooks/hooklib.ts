@@ -70,9 +70,15 @@ export function eventForFailure(input: HookInput): ReactionEvent | null {
   return "error";
 }
 
-function readWritableState(): PetState | null {
+// Returns the state ONLY when it is safe to write back over: a complete read, or a genuinely
+// absent file (new pet). Returns null when the file is unreadable/partial, so callers leave
+// the real pet's file untouched rather than persisting defaults over it.
+export function readWritableState(): PetState | null {
   const read = readState();
-  return !read.ok && read.reason === "unreadable" ? null : read.state;
+  if (read.ok) return read.state;
+  // A genuinely absent file is a new pet (safe to write); partial/unreadable is suspect —
+  // return null so callers leave the real pet's file untouched.
+  return read.reason === "missing" ? read.state : null;
 }
 
 export function tickAndSave(): PetState | null {
