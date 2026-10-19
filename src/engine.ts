@@ -4,6 +4,7 @@
 import type { PetState, ReactionEvent } from "./types.ts";
 import type { Activity, FitnessSnapshot, FitnessSource } from "./sources/types.ts";
 import { computeWindowLoad, rollingScoreFromLoad, tick, tierOf, tierRank } from "./vitality.ts";
+import { creditWorkouts, defaultScreenDebt } from "./screen-debt/state.ts";
 
 export interface SyncResult {
   state: PetState;
@@ -34,6 +35,7 @@ export function applySnapshot(
   const latest = latestActivity(snap);
   const fedState: PetState = {
     ...state,
+    screenDebt: creditWorkouts(state.screenDebt ?? defaultScreenDebt(nowIso), snap.activities ?? [], source.id, nowIso),
     fitness: {
       rollingScore: newScore,
       windowDays: snap.windowDays,

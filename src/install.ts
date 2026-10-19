@@ -30,6 +30,7 @@ const HOOK_MATCHER = "Bash|Edit|Write|MultiEdit|NotebookEdit";
 export function fitpetHookEntries(src: string): Record<string, Json[]> {
   return {
     SessionStart: [{ hooks: [{ type: "command", command: cmd(src, "hooks/session-start.ts") }] }],
+    UserPromptSubmit: [{ hooks: [{ type: "command", command: cmd(src, "hooks/user-prompt-submit.ts") }] }],
     Stop: [{ hooks: [{ type: "command", command: cmd(src, "hooks/stop.ts") }] }],
     PostToolUse: [{ matcher: HOOK_MATCHER, hooks: [{ type: "command", command: cmd(src, "hooks/post-tool-use.ts") }] }],
     PostToolUseFailure: [{ matcher: HOOK_MATCHER, hooks: [{ type: "command", command: cmd(src, "hooks/post-tool-use-failure.ts") }] }],

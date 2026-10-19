@@ -27,7 +27,7 @@ test("previewAdditions shows only FitPet's hook additions, never a pre-existing 
 
 test("previewAdditions lists our hook entries when none exist", () => {
   const preview = previewAdditions({}, SRC);
-  for (const ev of ["SessionStart", "Stop", "PostToolUse", "PostToolUseFailure"]) {
+  for (const ev of ["SessionStart", "UserPromptSubmit", "Stop", "PostToolUse", "PostToolUseFailure"]) {
     assert.ok(Array.isArray(preview.hooks[ev]), `${ev} present`);
   }
 });
@@ -48,11 +48,11 @@ test("readSettingsStrict: empty -> {}, valid -> parsed, missing -> {}, corrupt -
   }
 });
 
-test("merge adds all four hook events to empty settings (and no statusLine)", () => {
+test("merge adds all five hook events to empty settings (and no statusLine)", () => {
   const { settings, added } = mergeSettings({}, SRC);
   assert.equal(settings.statusLine, undefined, "FitPet no longer registers a statusLine");
   const hooks = settings.hooks as Record<string, unknown[]>;
-  for (const ev of ["SessionStart", "Stop", "PostToolUse", "PostToolUseFailure"]) {
+  for (const ev of ["SessionStart", "UserPromptSubmit", "Stop", "PostToolUse", "PostToolUseFailure"]) {
     assert.ok(Array.isArray(hooks[ev]), `${ev} present`);
     assert.ok(added.includes(`hooks.${ev}`));
   }

@@ -24,9 +24,10 @@ function num(x: unknown): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
-function toIso(s: unknown): string {
+function toIso(s: unknown, utc = false): string {
   if (typeof s !== "string" || !s) return "";
-  const t = s.includes("T") ? s : s.replace(" ", "T");
+  let t = s.includes("T") ? s : s.replace(" ", "T");
+  if (utc && !/(?:Z|[+-]\d{2}:?\d{2})$/i.test(t)) t += "Z";
   const d = new Date(t);
   return Number.isNaN(d.getTime()) ? "" : d.toISOString();
 }
@@ -49,6 +50,8 @@ function latestAtl(trend: unknown): number | undefined {
 }
 
 interface GarminActivity {
+  activity_id?: string | number;
+  activityId?: string | number;
   start_time_local?: string;
   start_time?: string;
   start_time_gmt?: string;
@@ -83,7 +86,9 @@ export const GarminSource: FitnessSource = {
       .map((a): Activity => {
         const seconds = num(a.moving_duration_seconds) ?? num(a.duration_seconds) ?? 0;
         return {
-          date: toIso(a.start_time_local || a.start_time || a.start_time_gmt),
+          id: a.activity_id !== undefined || a.activityId !== undefined ? String(a.activity_id ?? a.activityId) : undefined,
+          // Prefer absolute GMT over ambiguous local wall time when both exist.
+          date: toIso(a.start_time_gmt, true) || toIso(a.start_time || a.start_time_local),
           durationMin: seconds / 60,
           sport: String(a.type ?? a.activity_type ?? "workout"),
           effort: num(a.training_load), // undefined -> duration x sportFactor fallback
