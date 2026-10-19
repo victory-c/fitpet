@@ -3,6 +3,7 @@
 // HTTP/OAuth sources (e.g. WHOOP) would add a networked variant of this interface.
 
 export interface Activity {
+  id?: string; // stable source identity for workout-credit deduplication
   date: string; // ISO
   durationMin: number;
   sport: string;

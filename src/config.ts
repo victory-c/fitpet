@@ -1,7 +1,22 @@
 // Tunable constants for the whole simulation. Kept in one place so balancing later
 // (Phase 5) is a single-file edit. Values are deliberately "roughly right", not gold-plated.
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
+
+// Observed coding activity, independent of vitality and growth.
+export const BREAK_GAP_MINUTES = 15;
+export const SESSION_TAIL_MINUTES = 1;
+export const LONG_SESSION_MINUTES = 60;
+
+// Product tuning, not medical guidance. Debt is independent of fitness vitality/growth.
+export const DEBT_HISTORY_DAYS = 7;
+export const DEBT_GRACE_MINUTES = 30;
+export const DEBT_RATE = 0.25; // points/min after the grace period
+export const DEBT_LONG_RATE = 0.5; // points/min after an hour
+export const DEBT_BREAK_RATE = 0.5; // points/min after a 15-minute inferred break
+export const DEBT_BREAK_CREDIT_MAX = 15; // at most this much per inferred break
+export const DEBT_RECOVERY_MAX = 40; // at most this much per workout/outdoor entry
+export const DEBT_THRESHOLDS = { CONCERNING: 35, DEGRADED: 60, CRITICAL: 80 } as const;
 
 // Vitality is a 0-100 number. These are the lower bounds of each tier.
 export const TIERS = {

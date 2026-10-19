@@ -5,6 +5,7 @@
 import { readFileSync } from "node:fs";
 import type { PetState, ReactionEvent } from "../types.ts";
 import { readState, saveState } from "../state.ts";
+import { withStateLock } from "../state-lock.ts";
 import { tick } from "../vitality.ts";
 import { applyReaction } from "../reactions.ts";
 
@@ -19,7 +20,16 @@ export interface HookInput {
 export function readHookInput(): HookInput {
   try {
     const raw = readFileSync(0, "utf8");
-    return raw ? (JSON.parse(raw) as HookInput) : {};
+    const parsed: unknown = raw ? JSON.parse(raw) : {};
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const value = parsed as Record<string, unknown>;
+    const tool = value.tool_input && typeof value.tool_input === "object" ? value.tool_input as Record<string, unknown> : {};
+    return {
+      hook_event_name: typeof value.hook_event_name === "string" ? value.hook_event_name : undefined,
+      source: typeof value.source === "string" ? value.source : undefined,
+      tool_name: typeof value.tool_name === "string" ? value.tool_name : undefined,
+      tool_input: { command: typeof tool.command === "string" ? tool.command : undefined },
+    };
   } catch {
     return {};
   }
@@ -82,18 +92,22 @@ export function readWritableState(): PetState | null {
 }
 
 export function tickAndSave(): PetState | null {
-  const current = readWritableState();
-  if (!current) return null;
-  const { state } = tick(current, nowIso());
-  saveState(state);
-  return state;
+  return withStateLock(() => {
+    const current = readWritableState();
+    if (!current) return null;
+    const { state } = tick(current, nowIso());
+    saveState(state);
+    return state;
+  });
 }
 
 export function reactAndSave(event: ReactionEvent): PetState | null {
-  const current = readWritableState();
-  if (!current) return null;
-  const { state } = tick(current, nowIso());
-  applyReaction(state, event, nowIso());
-  saveState(state);
-  return state;
+  return withStateLock(() => {
+    const current = readWritableState();
+    if (!current) return null;
+    const { state } = tick(current, nowIso());
+    applyReaction(state, event, nowIso());
+    saveState(state);
+    return state;
+  });
 }

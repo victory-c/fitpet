@@ -2,9 +2,11 @@
 // Stop: the per-turn "heartbeat". Just advance the sim (ease vitality toward the last
 // known fitness score, tick age/healthyDays). No quip — that would be noisy every turn.
 
-import { tickAndSave } from "./hooklib.ts";
+import { readHookInput, tickAndSave } from "./hooklib.ts";
+import { recordActivity } from "../local-activity/classify.ts";
 
 try {
+  recordActivity(readHookInput(), "Stop");
   tickAndSave();
 } catch {
   /* never break a session */

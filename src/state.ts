@@ -11,6 +11,7 @@ import { SCHEMA_VERSION, START_VITALITY, DEFAULT_WINDOW_DAYS } from "./config.ts
 import { speciesOf, DEFAULT_SPECIES } from "./content/species.ts";
 import { isPersonality } from "./content/personalities.ts";
 import { clamp } from "./vitality.ts";
+import { defaultScreenDebt, sanitizeScreenDebt } from "./screen-debt/state.ts";
 
 // FITPET_HOME lets tests point at a temp dir. Read at call-time, not import-time.
 export function fitpetHome(): string {
@@ -43,6 +44,7 @@ export function defaultState(nowIso = new Date().toISOString(), opts: NewPetOpti
     // steady — it must not wilt from absence of data, only from a real low-activity sync.
     fitness: { rollingScore: START_VITALITY, windowDays: DEFAULT_WINDOW_DAYS, source: null, lastActivityAt: null, lastSport: null, lastSyncAt: null },
     reaction: null,
+    screenDebt: defaultScreenDebt(nowIso),
   };
 }
 
@@ -104,7 +106,7 @@ export function sanitizeState(raw: unknown): PetState {
   const event = str(rawReaction.event, "");
 
   return {
-    schemaVersion: Math.max(1, Math.floor(num(state.schemaVersion, SCHEMA_VERSION))),
+    schemaVersion: Math.max(SCHEMA_VERSION, Math.floor(num(state.schemaVersion, SCHEMA_VERSION))),
     pet: {
       name: str(rawPet.name, base.pet.name),
       species: safeSpecies,
@@ -117,6 +119,8 @@ export function sanitizeState(raw: unknown): PetState {
     healthyDays: Math.max(0, Math.floor(num(state.healthyDays, base.healthyDays))),
     lastHealthyDayCounted: nullableStr(state.lastHealthyDayCounted, base.lastHealthyDayCounted),
     lastTickAt: isoStr(state.lastTickAt, base.lastTickAt),
+    // Old pets start tracking now, not from birth: no surprise historical penalty.
+    screenDebt: sanitizeScreenDebt(state.screenDebt, base.lastTickAt),
     fitness: {
       rollingScore: clamp(num(rawFitness.rollingScore, START_VITALITY)),
       windowDays: positiveInt(rawFitness.windowDays, DEFAULT_WINDOW_DAYS),
@@ -194,11 +198,8 @@ export function loadState(): PetState {
   return readState().state;
 }
 
-// Concurrency note (single-user V1): writes are atomic (temp file + rename), so no reader
-// ever sees a half-written file. We deliberately do NOT lock. Two hook processes firing in
-// the same instant could "lose" one update (last writer wins) — harmless and self-healing
-// here, since the next tick re-derives state. Locking (and its stale-lock failure modes) is
-// not worth it for one local user; revisit if FitPet ever goes multi-process/multi-user.
+// Low-level atomic write. Runtime CLI/hook transactions acquire withStateLock BEFORE
+// reading; rename alone cannot prevent lost read-modify-write updates. The desktop is read-only.
 export function saveState(state: PetState): void {
   const dir = fitpetHome();
   mkdirSync(dir, { recursive: true });

@@ -1,6 +1,8 @@
 // Shared types for the pet's persisted state. Using string-union types (not TS `enum`)
 // keeps the code "erasable" so Node can run the .ts files directly without a build step.
 
+import type { ScreenDebtState } from "./screen-debt/state.ts";
+
 export type Tier = "thriving" | "healthy" | "wilting" | "dormant";
 
 export type Stage = "egg" | "hatchling" | "juvenile" | "adult";
@@ -61,4 +63,5 @@ export interface PetState {
   lastTickAt: string; // ISO
   fitness: FitnessState;
   reaction: Reaction | null;
+  screenDebt?: ScreenDebtState; // optional only for older in-memory callers; disk reads migrate
 }

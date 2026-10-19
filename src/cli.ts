@@ -4,6 +4,7 @@
 
 import process from "node:process";
 import { readFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 
 import { readState, saveState, defaultState, statePath } from "./state.ts";
 import { tick, tierOf } from "./vitality.ts";
@@ -29,6 +30,11 @@ import {
 } from "./install.ts";
 import type { PetState, ReactionEvent } from "./types.ts";
 import type { FitnessSource, FitnessSnapshot } from "./sources/types.ts";
+import { withStateLock } from "./state-lock.ts";
+import { addRecovery, defaultScreenDebt, recoveryId } from "./screen-debt/state.ts";
+import { computeScreenDebt } from "./screen-debt/score.ts";
+import { readActivity } from "./local-activity/log.ts";
+import { clineHookPlan, installClineHooks, uninstallClineHooks } from "./install-cline.ts";
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -99,12 +105,18 @@ function renderStatus(s: PetState): string {
     `   ${s.pet.personality} · last sync ${s.fitness.lastSyncAt ?? "never"}`,
   ];
   if (s.reaction) lines.push(`   says: "${s.reaction.text}"`);
+  const activity = readActivity();
+  if (activity.ok) {
+    const debt = computeScreenDebt(activity.events, s.screenDebt ?? defaultScreenDebt(nowIso()), new Date());
+    lines.push(`   screen debt ${Math.round(debt.score)}/100 · ${debt.severity.toLowerCase()}`);
+  } else lines.push(`   screen debt: activity ${activity.reason}`);
   return lines.join("\n");
 }
 
 function usage(): string {
   return [
     "fitpet — a desktop pixel companion that grows from your fitness",
+    "  outdoor <minutes>               log outdoor time ending now (screen-debt recovery only)",
     "",
     "  status                          print the pet as text (advances the sim; the GUI is the real face)",
     "  tick                            advance the sim (ease + age); never penalizes time",
@@ -115,6 +127,8 @@ function usage(): string {
     "  install [--print --repair]      add FitPet's coding-event hooks to ~/.claude/settings.json",
     "  uninstall                       remove FitPet's hooks from settings.json (keeps your pet)",
     "  doctor                          show install + state status",
+    "  cline-install --host vscode|cli --workspace /absolute/path [--print]   install local Cline hooks",
+    "  cline-uninstall --host vscode|cli --workspace /absolute/path          remove unchanged FitPet Cline hooks",
     "  path                            print the state file path",
     "",
     `state: ${statePath()}`,
@@ -125,6 +139,46 @@ function main(): void {
   const [, , cmd = "status", ...rest] = process.argv;
 
   switch (cmd) {
+    case "cline-install":
+    case "cline-uninstall": {
+      const host = getFlag(rest, "host");
+      const workspace = getFlag(rest, "workspace");
+      if ((host !== "vscode" && host !== "cli") || !workspace) {
+        console.error(`usage: fitpet ${cmd} --host vscode|cli --workspace /absolute/path [--print]`);
+        process.exitCode = 1;
+        return;
+      }
+      if (rest.includes("--print")) {
+        console.log(JSON.stringify(clineHookPlan(host, workspace), null, 2));
+        return;
+      }
+      const paths = cmd === "cline-install" ? installClineHooks(host, workspace) : uninstallClineHooks(host, workspace);
+      console.log(`FitPet Cline hooks ${cmd === "cline-install" ? "installed" : "removed"}: ${paths.length} files.`);
+      for (const path of paths) console.log(`   ${path}`);
+      if (cmd === "cline-install") {
+        console.log("Restart/reload Cline; VS Code users must enable Hooks in Cline's feature settings.");
+        console.log("No global settings were changed. Run the companion with the same FITPET_HOME if overridden.");
+      }
+      break;
+    }
+    case "outdoor": {
+      const minutes = Number(rest[0]);
+      if (!Number.isFinite(minutes) || minutes <= 0 || minutes > 180) {
+        console.error("usage: fitpet outdoor <minutes> (1–180)");
+        process.exitCode = 1;
+        return;
+      }
+      const current = readStateForWrite();
+      if (!current) { process.exitCode = 1; return; }
+      const now = nowIso();
+      current.screenDebt = addRecovery(current.screenDebt ?? defaultScreenDebt(now), {
+        id: recoveryId(`outdoor:${randomUUID()}`), at: now, minutes, kind: "outdoor",
+      }, now);
+      saveState(current);
+      console.log(`Recorded ${minutes} outdoor minutes. No fitness or growth change.`);
+      console.log(renderStatus(current));
+      break;
+    }
     case "status":
     case "tick": {
       // NOTE: these ADVANCE the sim before rendering. loadState() first sanitizes any bad
@@ -146,11 +200,11 @@ function main(): void {
       const minutes = Number(rest[0]);
       if (!Number.isFinite(minutes) || minutes <= 0) {
         console.error("usage: fitpet feed <minutes>");
-        process.exit(1);
+        process.exitCode = 1; return;
       }
       const current = readStateForWrite();
       if (!current) {
-        process.exit(1);
+        process.exitCode = 1;
         return;
       }
       const { state, events } = applySnapshot(current, ManualSource.normalize(minutes), ManualSource, nowIso());
@@ -169,7 +223,7 @@ function main(): void {
         raw = JSON.parse(json);
       } catch {
         console.error("fitpet sync: expected JSON via --file <path>, stdin, or --json");
-        process.exit(1);
+        process.exitCode = 1;
         return;
       }
 
@@ -195,7 +249,7 @@ function main(): void {
 
       const current = readStateForWrite();
       if (!current) {
-        process.exit(1);
+        process.exitCode = 1;
         return;
       }
       const { state, events } = applySnapshot(current, snap, source, nowIso());
@@ -212,12 +266,12 @@ function main(): void {
       const ev = rest[0] as ReactionEvent | undefined;
       if (!ev) {
         console.error("usage: fitpet react <event>");
-        process.exit(1);
+        process.exitCode = 1;
         return;
       }
       const state = readStateForWrite();
       if (!state) {
-        process.exit(1);
+        process.exitCode = 1;
         return;
       }
       setReaction(state, ev);
@@ -231,11 +285,11 @@ function main(): void {
       const personality = getFlag(rest, "personality");
       if (species && !SPECIES[species]) {
         console.error(`unknown species '${species}'. options: ${Object.keys(SPECIES).join(", ")}`);
-        process.exit(1);
+        process.exitCode = 1; return;
       }
       if (personality && !isPersonality(personality)) {
         console.error(`unknown personality '${personality}'. options: ${PERSONALITIES.join(", ")}`);
-        process.exit(1);
+        process.exitCode = 1; return;
       }
       const state = defaultState(nowIso(), { name: getFlag(rest, "name"), species, personality });
       saveState(state);
@@ -257,7 +311,7 @@ function main(): void {
         // Dry run: show ONLY FitPet's proposed hook additions; never echo existing commands.
         const existing = loadSettingsForWrite(settingsPath, rest.includes("--repair"));
         if (existing === null) {
-          process.exit(1);
+          process.exitCode = 1;
           return;
         }
         console.log(JSON.stringify(previewAdditions(existing, src), null, 2));
@@ -266,7 +320,7 @@ function main(): void {
 
       const existing = loadSettingsForWrite(settingsPath, rest.includes("--repair"));
       if (existing === null) {
-        process.exit(1);
+        process.exitCode = 1;
         return;
       }
       const { settings, warnings, added } = mergeSettings(existing, src);
@@ -286,7 +340,7 @@ function main(): void {
       const settingsPath = getFlag(rest, "settings") ?? defaultSettingsPath();
       const existing = loadSettingsForWrite(settingsPath, false); // never repair on uninstall
       if (existing === null) {
-        process.exit(1);
+        process.exitCode = 1;
         return;
       }
       const { settings, removed } = unmergeSettings(existing, srcDir());
@@ -315,4 +369,11 @@ function main(): void {
   }
 }
 
-main();
+// All state-changing commands cooperate with hooks. Acquire before the first read.
+try {
+  if (["status", "tick", "feed", "sync", "react", "reset", "outdoor"].includes(process.argv[2] ?? "status")) withStateLock(main);
+  else main();
+} catch (error) {
+  console.error(`fitpet: ${error instanceof Error ? error.message : "command failed"}`);
+  process.exitCode = 1;
+}

@@ -3,11 +3,14 @@
 // Edits are common, so we only react to a fraction of them to keep the pet lively, not spammy.
 
 import { readHookInput, eventForPostToolUse, reactAndSave } from "./hooklib.ts";
+import { recordActivity } from "../local-activity/classify.ts";
 
 const EDIT_REACT_CHANCE = 0.34;
 
 try {
-  const event = eventForPostToolUse(readHookInput());
+  const input = readHookInput();
+  recordActivity(input, "PostToolUse");
+  const event = eventForPostToolUse(input);
   if (event === "edit") {
     if (Math.random() < EDIT_REACT_CHANCE) reactAndSave("edit");
   } else if (event) {

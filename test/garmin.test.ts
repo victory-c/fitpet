@@ -5,6 +5,23 @@ import { computeWindowLoad } from "../src/vitality.ts";
 
 const nowIso = new Date().toISOString();
 
+test("GMT wall times are UTC, explicit offsets are preserved, and invalid GMT falls back", (ctx) => {
+  const previous = process.env.TZ;
+  process.env.TZ = "America/Los_Angeles";
+  ctx.after(() => {
+    if (previous === undefined) delete process.env.TZ;
+    else process.env.TZ = previous;
+  });
+  const instant = new Date(Date.now() - 3_600_000).toISOString();
+  const wallTime = instant.slice(0, -1).replace("T", " ");
+  for (const start_time_gmt of [wallTime, instant, instant.replace("Z", "+00:00")]) {
+    const snap = GarminSource.normalize([{ start_time_gmt, start_time_local: "invalid", duration_seconds: 1800 }]);
+    assert.equal(snap.activities[0]?.date, instant);
+  }
+  const fallback = GarminSource.normalize([{ start_time_gmt: "invalid", start_time_local: instant }]);
+  assert.equal(fallback.activities[0]?.date, instant);
+});
+
 test("GarminSource maps real activity fields, using training_load as effort", () => {
   const raw = {
     activities: [

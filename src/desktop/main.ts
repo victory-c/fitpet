@@ -6,17 +6,17 @@
 import { app, BrowserWindow, ipcMain, screen } from "electron";
 import { fileURLToPath } from "node:url";
 
-import { createSnapshotReader } from "./snapshot.ts";
+import { createCompanionReader } from "./activity-snapshot.ts";
 import { loadBounds, saveBounds, type Bounds } from "./window-store.ts";
 
 const WIDTH = 300;
-const HEIGHT = 380;
+const HEIGHT = 410;
 
 let win: BrowserWindow | null = null;
 let lastJson = "";
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
-const nextSnapshot = createSnapshotReader();
+const nextSnapshot = createCompanionReader();
 
 function pushIfChanged(): void {
   if (!win || win.isDestroyed()) return;

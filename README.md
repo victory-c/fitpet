@@ -30,6 +30,10 @@ Shelldon shows two things at once, composed from modular pixel parts (no per-com
   panel).
 - **Reactions (← coding).** Claude Code hooks write quips into state; the window shows a **speech
   bubble** + a brief **green/red screen flash**. Templated, **no model calls**.
+- **Coding sessions.** An always-visible label shows estimated session length. After 60 minutes
+  without a 15-minute activity gap, Shelldon nudges you to touch grass. This does not affect fitness or growth.
+- **Screen debt.** A separate 0–100 score rises during long observed coding sessions and falls
+  with breaks, completed workouts, and manually logged outdoor time. Concern-level bubbles are local templates.
 - **Sport.** A recent Garmin activity makes Shelldon briefly **perform** it (run / cycle / swim),
   and the CRT shows a sport readout for a while after.
 
@@ -38,7 +42,7 @@ The pet **grows from your workouts** but **reacts to your code**, and the two ne
 ## Why the hooks matter
 
 The window runs **outside** Claude Code, so it can't see your coding events itself. Claude Code
-hooks (`SessionStart`, `Stop`, `PostToolUse`, `PostToolUseFailure`) are the **bridge**: they
+hooks (`SessionStart`, `UserPromptSubmit`, `Stop`, `PostToolUse`, `PostToolUseFailure`) are the **bridge**: they
 detect events and write reactions into `~/.fitpet/state.json`, which the window watches and shows.
 
 ## Requirements
@@ -63,6 +67,102 @@ node src/cli.ts install                  # add the coding-event hooks to ~/.clau
 `install` is safe: it **backs up** your `settings.json`, **merges** (never clobbers existing
 keys), and **aborts** rather than overwrite an unparseable file. Preview with
 `node src/cli.ts install --print`; undo with `node src/cli.ts uninstall`.
+
+### Coding-session reminders
+
+Existing users: rerun `node src/cli.ts install`, then restart Claude Code and the companion
+to enable the new prompt hook. There is no backfill of earlier coding activity.
+
+Hooks append **only event kinds and timestamps** to `~/.fitpet/activity.jsonl` (also covered
+by `FITPET_HOME`). No prompts, session identifiers, command text, paths, or output are stored.
+The desktop derives one combined timeline from these events; `Stop` is turn completion,
+not a break. A gap of **15 minutes or more** ends the session. Reminders appear at **60 minutes**,
+last 90 seconds, and fire once per observed session per app run. Restarting while overdue
+may show one again. Tune defaults in `src/config.ts`.
+
+This estimates **hook-observed activity**, not actual screen time: manual coding can be missed,
+and autonomous tools can count while you are away. Silence does not prove you went outside.
+The reader caches unchanged logs and reads only the last 2 MiB; older history can be omitted.
+The on-disk journal is not automatically rotated yet. With the companion stopped and hooks
+inactive, you can delete the journal to clear activity history without resetting the pet.
+
+### Screen debt and recovery
+
+Debt is replayed chronologically over the last **7 days**, starting when debt tracking is first
+saved for your pet. The displayed score is derived, not a per-poll counter. Settings in `src/config.ts`:
+
+- First 30 minutes of each observed session: no debt.
+- Minutes 30–60: 0.25 points/minute; after 60: 0.5 points/minute.
+- Coding estimates include at most one minute after the final event, not the whole idle gap.
+- After a 15-minute activity gap, inferred break recovery is 0.5 points/minute, capped at 15 points per break.
+- Completed workouts and outdoor entries repay 1 point/minute, capped at 40 per entry. No negative credit bank.
+- Concern bands start at 35, 60, and 80. These are product defaults, **not medical guidance**.
+
+Garmin activity durations supply workout credit; rolling training load by itself does not.
+Credit applies at the activity's completion time, so an old workout discovered later cannot
+prepay coding that happened afterward. Repeated syncs deduplicate source activity IDs (with a
+start-time/sport fallback); edited workouts keep their original credit. Gym workouts count as
+workouts, not proof of outdoor time. A newly started/incomplete workout is not credited yet.
+
+Log outdoor time ending now with `node src/cli.ts outdoor 20` (up to 180 minutes per entry).
+This is self-reported and does not change vitality or growth. Avoid logging an outing already
+credited as a Garmin workout: cross-source/manual overlap cannot be reliably detected.
+`fitpet feed` remains a synthetic fitness testing command, not a completed workout recorder.
+
+Recovery records (hashed identities, completion timestamps, minutes, and kind) are stored in
+`~/.fitpet/state.json`; the hook journal remains **only kinds and timestamps**. Missing older
+schema fields migrate without resetting identity or growth. The replay uses only available journal
+history (last 2 MiB), so deleting/truncating the journal or changing scoring settings can change debt.
+Recovery history is bounded to 2,048 entries and the rolling window; this is a wellness toy, not an audit ledger.
+
+CLI and hook state transactions now cooperate through `~/.fitpet/state.lock`. They wait up to
+two seconds, recover confirmed dead-process owners, and fail closed for uncertain locks.
+An interrupted empty/malformed lock or orphaned `.recover` guard may need manual removal **only
+after stopping all FitPet writers**. Desktop reads remain non-writing. External scripts that call
+the low-level `saveState` directly must use the same transaction lock.
+
+### Cline activity (opt-in, project-local)
+
+FitPet accepts both Cline VS Code and CLI hook envelopes. Choose your host explicitly:
+
+```bash
+# Preview only: no hooks or settings are changed.
+node /Users/victorchun/fitpet/src/cli.ts cline-install --host vscode --workspace /Users/victorchun/fitpet --print
+
+# Install for Cline VS Code in this workspace (then enable Hooks in Cline settings).
+node /Users/victorchun/fitpet/src/cli.ts cline-install --host vscode --workspace /Users/victorchun/fitpet
+
+# Or use --host cli for the Terminal/CLI host, not both for the same host.
+# Remove unchanged FitPet launchers; pet state and activity history remain intact.
+node /Users/victorchun/fitpet/src/cli.ts cline-uninstall --host vscode --workspace /Users/victorchun/fitpet
+```
+
+The VS Code installer writes six executable, extensionless files under the selected workspace's
+`.clinerules/hooks`: TaskStart, UserPromptSubmit, PreToolUse, PostToolUse, TaskComplete, TaskCancel.
+The CLI installer writes `.cline/hooks/<Event>.sh` for those events plus TaskResume, TaskError,
+and SessionShutdown. Restart/reload Cline after installing; actual hook availability depends on
+your host/version. PreCompact and Notification are deliberately not installed.
+
+Installation requires an explicit absolute existing workspace, supports POSIX `/bin/sh` only,
+and never changes global settings or enables hooks. It refuses existing foreign/edited hook
+files, alternate event filenames, and symlinked destinations rather than overwriting/wrapping
+them. Uninstall removes only exact matching generated launchers. If Node or the FitPet repo
+moves, uninstall with the original environment before reinstalling; the launchers contain
+absolute paths to avoid relying on the editor's Node PATH. Do not commit machine-specific launchers.
+
+The adapter always returns `{"cancel":false}`, injects no model context, and prints no private
+payload or diagnostics. It appends **only `{t, kind}`** using the local reception timestamp:
+start/resume → session_start, prompt → prompt, tool start → tool, tool completion → tool/edit/error,
+and completion/cancel/shutdown → stop. Task errors → error. Tool success does not imply a test
+passed; commands and output are not inspected for test classification. Task completion is not a
+break. No Cline user/task IDs, source labels, paths, prompts, or output enter the journal.
+
+Claude Code and Cline share the same timeline and debt calculation. Simultaneous events do not
+double elapsed time, though autonomous tools can still look like human activity. If using a
+custom `FITPET_HOME`, make sure Cline inherits it and the companion uses the same value.
+No installed Cline binary/extension was available for live host validation during development;
+the real generated launchers are tested with documented extension and CLI fixture payloads.
+See `docs/cline-hooks.md` for the upstream contracts used.
 
 > If `npm run app:dev` fails with `Error: Electron uninstall`, the Electron binary didn't
 > download. Fix it with `node node_modules/electron/install.js`, then retry.

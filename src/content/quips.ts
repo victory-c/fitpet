@@ -33,9 +33,9 @@ const QUIPS: Pools = {
     chill: ["tweak tweak. lookin' clean.", "ok ok, i see you."],
   },
   long_session: {
-    earnest: ["You've been at this a while — stretch break?", "Long haul today. Water?"],
-    sarcastic: ["Still here? Touch grass eventually.", "This is basically your home now."],
-    chill: ["long one today. hydrate maybe.", "marathon sesh, huh."],
+    earnest: ["You've been at this a while — go touch grass?", "Time for a break. I'll guard the terminal."],
+    sarcastic: ["Still here? Go touch grass.", "An hour already. The outside still exists."],
+    chill: ["grass break? i'll be here 🌿", "long one today. let's step outside."],
   },
   idle: {
     earnest: ["Take your time.", "I'll be right here."],
