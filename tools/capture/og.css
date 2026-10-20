@@ -1,0 +1,9 @@
+html, body { margin: 0; width: 1280px; height: 640px; background: #06140b; color: #e8e2d2; }
+body { font: 24px/1.5 system-ui, sans-serif; }
+main { box-sizing: border-box; width: 1150px; height: 600px; margin: 20px auto; display: flex; align-items: center; gap: 42px; }
+section { flex: 1; }
+.eyebrow, .address { font: 19px/1.5 ui-monospace, monospace; color: #7de893; }
+h1 { font: 700 49px/1.15 ui-monospace, monospace; letter-spacing: -2px; margin: 22px 0; }
+p { color: #c9d1d9; }
+.address { margin-top: 34px; }
+img { width: 360px; height: 492px; object-fit: contain; image-rendering: auto; }

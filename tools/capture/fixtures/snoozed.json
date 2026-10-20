@@ -1,0 +1,27 @@
+{
+  "species": "sprout",
+  "name": "Shelldon",
+  "tier": "healthy",
+  "stage": "adult",
+  "vitality": 60,
+  "rollingScore": 60,
+  "lastSport": null,
+  "lastActivityAt": null,
+  "healthyDays": 21,
+  "reaction": null,
+  "notifications": {
+    "snoozed": true,
+    "remainingMinutes": 30,
+    "snoozedUntil": "2026-10-20T12:30:00.000Z"
+  },
+  "screenDebt": {
+    "score": 15,
+    "severity": "NORMAL"
+  },
+  "coding": {
+    "active": true,
+    "currentCodingSessionMinutes": 75,
+    "lastActivityAt": "2026-10-20T12:00:00.000Z"
+  },
+  "activityStatus": "ready"
+}

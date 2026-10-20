@@ -1,0 +1,102 @@
+{
+  "browser": "Playwright 1.63.0 / Chromium revision 1243",
+  "assets": [
+    {
+      "name": "hero-poster.png",
+      "width": 600,
+      "height": 820,
+      "bytes": 35691,
+      "target55000": true
+    },
+    {
+      "name": "touch-grass.png",
+      "width": 600,
+      "height": 820,
+      "bytes": 37571,
+      "target55000": true
+    },
+    {
+      "name": "debt.png",
+      "width": 600,
+      "height": 820,
+      "bytes": 38831,
+      "target55000": true
+    },
+    {
+      "name": "snoozed.png",
+      "width": 600,
+      "height": 820,
+      "bytes": 32870,
+      "target55000": true
+    },
+    {
+      "name": "favicon-32.png",
+      "width": 32,
+      "height": 32,
+      "bytes": 404,
+      "target55000": true
+    },
+    {
+      "name": "apple-touch-icon.png",
+      "width": 180,
+      "height": 180,
+      "bytes": 1704,
+      "target55000": true
+    },
+    {
+      "name": "og-v1.png",
+      "width": 1280,
+      "height": 640,
+      "bytes": 73272,
+      "target55000": false
+    }
+  ],
+  "checks": [
+    {
+      "frames": 180,
+      "stepMs": 33.34,
+      "warmupMs": 333.4,
+      "selectedHashes": {
+        "0": "044d7d3111691c120023631b6e147b6cc94009bd9571a4f852f5d2249827e40f",
+        "1": "044d7d3111691c120023631b6e147b6cc94009bd9571a4f852f5d2249827e40f",
+        "30": "605d6718d0ec091727eb38e3bbf8dfa14829d7b8c66a9a068f84afa8f5f13d7b",
+        "179": "3adb1ea5fd922a138da5363b7dcac502540dc62e53fa2b1ac3cc5951046c82d4"
+      },
+      "seam": "First and last differ; flash begins on frame0 but has expired by frame179. Loop omitted."
+    },
+    {
+      "fixture": "hero",
+      "labels": "exact",
+      "bubble": "exact",
+      "canvasPixels": 21286,
+      "animatedCanvas": true
+    },
+    {
+      "fixture": "touch-grass",
+      "labels": "exact",
+      "bubble": "exact",
+      "canvasPixels": 21368,
+      "animatedCanvas": true
+    },
+    {
+      "fixture": "debt",
+      "labels": "exact",
+      "bubble": "exact",
+      "canvasPixels": 21368,
+      "animatedCanvas": true
+    },
+    {
+      "fixture": "snoozed",
+      "labels": "exact",
+      "bubble": "exact",
+      "canvasPixels": 21368,
+      "animatedCanvas": true
+    },
+    {
+      "externalRequests": [],
+      "rendererAndOgErrors": [],
+      "resourceFailures": []
+    }
+  ],
+  "loop": "Omitted: test-pass flash ends at 1500ms, so first/last screen states do not match. No seamless-loop claim."
+}
