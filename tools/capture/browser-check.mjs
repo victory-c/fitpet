@@ -85,6 +85,33 @@ async function scenario({ theme = 'dark', width = 1280, js = true, motion = 'red
     if (box && box.y >= 900 && await image.getAttribute('fetchpriority') !== 'high') assert.equal(await image.getAttribute('loading'), 'lazy', 'Below-fold non-hero image must be lazy');
   }
   assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${name}: horizontal overflow`);
+  const contrastFailures = await page.evaluate(() => {
+    const rgb = (value) => value.match(/[\d.]+/g).map(Number);
+    const luminance = (color) => color.slice(0, 3).map((value) => {
+      const n = value / 255;
+      return n <= .04045 ? n / 12.92 : ((n + .055) / 1.055) ** 2.4;
+    }).reduce((sum, value, i) => sum + value * [.2126, .7152, .0722][i], 0);
+    const failures = [];
+    for (const element of document.querySelectorAll('body *')) {
+      if (['SCRIPT', 'STYLE'].includes(element.tagName) || !element.getClientRects().length) continue;
+      if (![...element.childNodes].some((node) => node.nodeType === Node.TEXT_NODE && node.textContent.trim())) continue;
+      const style = getComputedStyle(element);
+      if (style.visibility !== 'visible') continue;
+      let background;
+      for (let parent = element; parent; parent = parent.parentElement) {
+        const color = rgb(getComputedStyle(parent).backgroundColor);
+        if (color.length < 4 || color[3] === 1) { background = color; break; }
+      }
+      if (!background) continue;
+      const text = luminance(rgb(style.color));
+      const back = luminance(background);
+      const ratio = (Math.max(text, back) + .05) / (Math.min(text, back) + .05);
+      const large = parseFloat(style.fontSize) >= 24 || (Number(style.fontWeight) >= 700 && parseFloat(style.fontSize) >= 18.66);
+      if (ratio < (large ? 3 : 4.5)) failures.push({ text: element.textContent.trim().slice(0, 60), ratio, color: style.color, background });
+    }
+    return failures;
+  });
+  assert.deepEqual(contrastFailures, [], `${name}: rendered text contrast ${JSON.stringify(contrastFailures)}`);
   assert.equal((await context.cookies()).length, 0);
   if (js) {
     assert.deepEqual(await page.evaluate(() => [localStorage.length, sessionStorage.length]), [0, 0]);
@@ -123,6 +150,12 @@ async function scenario({ theme = 'dark', width = 1280, js = true, motion = 'red
   assert.equal(new URL(page.url()).hash, '#main');
   assert(await page.evaluate(() => document.activeElement === document.querySelector('main') || document.querySelector('main').contains(document.activeElement)), 'Skip link moves keyboard focus into main');
   await page.locator('main').evaluate((element) => element.blur());
+  const details = page.locator('details');
+  await details.locator('summary').focus();
+  await page.keyboard.press('Enter');
+  assert(await details.evaluate((element) => element.open), 'Score explanation opens from keyboard');
+  await page.keyboard.press('Enter');
+  assert(!await details.evaluate((element) => element.open));
   // Scroll through lazy images so review screenshots contain decoded imagery.
   for (const image of await page.locator('img').all()) await image.scrollIntoViewIfNeeded();
   await page.evaluate(() => scrollTo(0, 0));
