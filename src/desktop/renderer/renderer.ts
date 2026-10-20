@@ -24,6 +24,7 @@ interface Reaction {
   setAtMs: number;
 }
 interface Snap {
+  notifications?: { snoozed: boolean; remainingMinutes: number; snoozedUntil: string | null };
   screenDebt?: { score: number; severity: string } | null;
   coding?: { active: boolean; currentCodingSessionMinutes: number; lastActivityAt: string | null } | null;
   activityStatus?: string;
@@ -50,6 +51,7 @@ const ctx = canvas.getContext("2d") as CanvasRenderingContext2D;
 const label = document.getElementById("label") as HTMLElement;
 const codingLabel = document.getElementById("coding-label") as HTMLElement;
 const debtLabel = document.getElementById("debt-label") as HTMLElement;
+const snoozeLabel = document.getElementById("snooze-label") as HTMLElement;
 const bubble = document.getElementById("bubble") as HTMLElement;
 const bubbleText = document.getElementById("bubble-text") as HTMLElement;
 
@@ -263,6 +265,11 @@ function compose(snap: Snap | null, tMs: number): void {
 
 function onSnap(s: Snap): void {
   current = s;
+  const snoozed = s.notifications?.snoozed ?? false;
+  snoozeLabel.style.visibility = snoozed ? "visible" : "hidden";
+  snoozeLabel.textContent = snoozed ? `Nudges snoozed · ${s.notifications!.remainingMinutes}m` : "";
+  snoozeLabel.title = snoozed && s.notifications?.snoozedUntil
+    ? `Until ${new Date(s.notifications.snoozedUntil).toLocaleString(undefined, { timeZoneName: "short" })}` : "";
   debtLabel.textContent = s.screenDebt ? `Screen debt · ${Math.round(s.screenDebt.score)}/100 · ${s.screenDebt.severity.toLowerCase()}` : "Screen debt · awaiting activity";
   debtLabel.dataset.severity = s.screenDebt?.severity ?? "NORMAL";
   codingLabel.textContent = s.activityStatus === "unreadable" ? "Activity unavailable"

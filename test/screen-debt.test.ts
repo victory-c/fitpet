@@ -77,7 +77,7 @@ test("outdoor recovery and schema sanitation strip invalid/duplicate entries wit
   assert.equal(sanitizeScreenDebt({ since: "bad", recoveries: [null, recovery, recovery, { ...recovery, id: "command-text" }] }, iso(0)).recoveries.length, 1);
   const pet = defaultState(iso(0)); pet.stage = "adult"; pet.healthyDays = 30;
   const migrated = sanitizeState({ ...pet, schemaVersion: 1, screenDebt: undefined });
-  assert.equal(migrated.schemaVersion, 2);
+  assert.equal(migrated.schemaVersion, 3);
   assert.equal(migrated.stage, "adult");
   assert.equal(migrated.healthyDays, 30);
   assert.equal(migrated.vitality, pet.vitality);

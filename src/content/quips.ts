@@ -34,7 +34,7 @@ const QUIPS: Pools = {
   },
   long_session: {
     earnest: ["You've been at this a while — go touch grass?", "Time for a break. I'll guard the terminal."],
-    sarcastic: ["Still here? Go touch grass.", "An hour already. The outside still exists."],
+    sarcastic: ["Still here? Go touch grass.", "Still coding? The outside still exists."],
     chill: ["grass break? i'll be here 🌿", "long one today. let's step outside."],
   },
   idle: {

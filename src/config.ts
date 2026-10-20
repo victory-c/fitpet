@@ -1,7 +1,16 @@
 // Tunable constants for the whole simulation. Kept in one place so balancing later
 // (Phase 5) is a single-file edit. Values are deliberately "roughly right", not gold-plated.
 
-export const SCHEMA_VERSION = 2;
+import type { NagIntensity } from "./types.ts";
+
+export const SCHEMA_VERSION = 3;
+
+// Presentation only. Never substitute these thresholds in screen-debt accounting.
+export const NAG_POLICIES: Record<NagIntensity, { firstMinutes: number; repeatMinutes: number | null; concernBands: readonly string[] }> = {
+  gentle: { firstMinutes: 90, repeatMinutes: null, concernBands: ["DEGRADED", "CRITICAL"] },
+  normal: { firstMinutes: 60, repeatMinutes: null, concernBands: ["CONCERNING", "DEGRADED", "CRITICAL"] },
+  persistent: { firstMinutes: 45, repeatMinutes: 30, concernBands: ["CONCERNING", "DEGRADED", "CRITICAL"] },
+};
 
 // Observed coding activity, independent of vitality and growth.
 export const BREAK_GAP_MINUTES = 15;

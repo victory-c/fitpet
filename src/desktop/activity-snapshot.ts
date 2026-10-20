@@ -7,6 +7,7 @@ import type { Personality } from "../types.ts";
 import { defaultScreenDebt } from "../screen-debt/state.ts";
 import { computeScreenDebt } from "../screen-debt/score.ts";
 import { createConcernReminder } from "../screen-debt/concern.ts";
+import { notificationStatus, persistedNudgeHidden, sanitizeNotifications } from "../notifications.ts";
 
 export interface CompanionSnapshot extends DesktopSnapshot {
   coding: CodingTelemetry | null;
@@ -21,11 +22,13 @@ export function createCompanionReader(
 ): () => CompanionSnapshot {
   let personality: Personality = "earnest";
   let debtState = defaultScreenDebt(now());
+  let settings = sanitizeNotifications(undefined);
   const base = createSnapshotReader(() => {
     const result = read();
     if (result.ok) {
       personality = result.state.pet.personality;
       debtState = result.state.screenDebt ?? debtState;
+      settings = sanitizeNotifications(result.state.notifications);
     }
     return result;
   }, now);
@@ -49,8 +52,11 @@ export function createCompanionReader(
       previousDebtState = debtState;
       lastSecond = second;
     }
-    const nudge = reminder(coding, personality, time);
-    const worry = concern(screenDebt?.score ?? null, personality, time);
-    return { ...snap, coding, screenDebt, activityStatus: result.ok ? "ready" : result.reason, reaction: worry ?? nudge ?? snap.reaction };
+    const notifications = notificationStatus(settings, time);
+    const options = { intensity: notifications.nagIntensity, snoozed: notifications.snoozed };
+    const nudge = reminder(coding, personality, time, options);
+    const worry = concern(screenDebt?.score ?? null, personality, time, options);
+    const reaction = snap.reaction && persistedNudgeHidden(settings, snap.reaction.event, snap.reaction.setAtMs, time) ? null : snap.reaction;
+    return { ...snap, notifications, coding, screenDebt, activityStatus: result.ok ? "ready" : result.reason, reaction: worry ?? nudge ?? reaction };
   };
 }

@@ -80,6 +80,53 @@ not a break. A gap of **15 minutes or more** ends the session. Reminders appear 
 last 90 seconds, and fire once per observed session per app run. Restarting while overdue
 may show one again. Tune defaults in `src/config.ts`.
 
+### Snooze and nudge intensity
+
+Right-click Shelldon, a speech bubble, or a label for **Snooze 30 min / 1 hour / until
+tomorrow / Unsnooze** and **Nag intensity → Gentle / Normal / Persistent**. Move the
+window using the small drag strip above the bubble. While snoozed, an always-visible
+**Nudges snoozed** badge shows remaining minutes; hover for the expiry date/time.
+
+```bash
+node src/cli.ts snooze 30
+node src/cli.ts snooze 2h
+node src/cli.ts snooze tomorrow
+node src/cli.ts snooze off
+node src/cli.ts nag gentle
+node src/cli.ts status
+```
+
+| Intensity | First session nudge | Repeats in an active session | Debt bands that can bubble |
+| --- | --- | --- | --- |
+| gentle | 90 minutes | Never | 60 / 80 |
+| normal (default) | 60 minutes | Never | 35 / 60 / 80 |
+| persistent | 45 minutes | Every 30 minutes after the previous opportunity | 35 / 60 / 80 |
+
+Concern messages never repeat within a stable band: they appear on an initial eligible
+band or escalation. All levels retain the recovery-to-normal message. Personality only
+changes tone. Reminders last 90 seconds, and their per-session history resets on app restart.
+Changing intensity does not reset that history or replay debt transitions. Missed repeat
+intervals never queue a burst.
+
+Snooze hides touch-grass and **all** debt bubbles (including recovery), not ordinary
+edit/test/fitness reactions. Already-visible nudges are dismissed; suppressed opportunities
+are consumed, not replayed on Unsnooze. Normal/gentle therefore wait for a new session if
+their one reminder occurred while snoozed; persistent waits for its next interval.
+**Debt continues accruing and recovering unchanged**, and its score remains visible.
+
+Positive whole durations accept minutes (bare or `m`) and hours (`h`). A new snooze replaces
+the previous one. `tomorrow` means the **next local calendar midnight**, not 24 hours;
+daylight-saving changes are respected when resolving it. Settings persist in `state.json`
+with backward-compatible defaults; old pets retain identity and growth.
+Settings also retain a presentation-only dismissal timestamp so a muted persisted nudge
+cannot reappear after Unsnooze or an app restart; ordinary reactions are unaffected.
+
+Expiry is an absolute timestamp checked on every snapshot/status, including after sleep
+or restart. Later timezone changes do not move it. Moving the system clock forward may
+expire snooze early; moving it backward extends the remaining time and can reactivate a
+retained deadline. Expired timestamps do not require a background write. The CLI status
+shows intensity, remaining minutes, and the local expiry including timezone.
+
 This estimates **hook-observed activity**, not actual screen time: manual coding can be missed,
 and autonomous tools can count while you are away. Silence does not prove you went outside.
 The reader caches unchanged logs and reads only the last 2 MiB; older history can be omitted.
@@ -115,7 +162,7 @@ schema fields migrate without resetting identity or growth. The replay uses only
 history (last 2 MiB), so deleting/truncating the journal or changing scoring settings can change debt.
 Recovery history is bounded to 2,048 entries and the rolling window; this is a wellness toy, not an audit ledger.
 
-CLI and hook state transactions now cooperate through `~/.fitpet/state.lock`. They wait up to
+CLI, hook, and desktop settings transactions cooperate through `~/.fitpet/state.lock`. They wait up to
 two seconds, recover confirmed dead-process owners, and fail closed for uncertain locks.
 An interrupted empty/malformed lock or orphaned `.recover` guard may need manual removal **only
 after stopping all FitPet writers**. Desktop reads remain non-writing. External scripts that call

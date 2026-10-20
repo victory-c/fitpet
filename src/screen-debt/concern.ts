@@ -1,5 +1,5 @@
-import { REACTION_TTL_SECONDS } from "../config.ts";
-import type { Personality } from "../types.ts";
+import { NAG_POLICIES, REACTION_TTL_SECONDS } from "../config.ts";
+import type { NagIntensity, Personality } from "../types.ts";
 import { severityOf, severityRank, type Severity } from "./severity.ts";
 
 const LINES: Record<Severity, Record<Personality, string>> = {
@@ -12,12 +12,15 @@ const LINES: Record<Severity, Record<Personality, string>> = {
 export function createConcernReminder() {
   let previous: Severity | null = null;
   let live: { text: string; event: string; setAtMs: number } | null = null;
-  return (score: number | null, personality: Personality, now: number) => {
+  return (score: number | null, personality: Personality, now: number,
+    options: { intensity?: NagIntensity; snoozed?: boolean } = {}) => {
     if (score === null) { live = null; return null; }
     const next = severityOf(score);
+    const eligible = next === "NORMAL" || NAG_POLICIES[options.intensity ?? "normal"].concernBands.includes(next);
     if (previous !== null && previous !== next) live = null;
-    if ((previous === null && next !== "NORMAL") ||
-      (previous !== null && (severityRank(next) > severityRank(previous) || (next === "NORMAL" && previous !== next)))) {
+    if (options.snoozed || !eligible) live = null;
+    if (!options.snoozed && eligible && ((previous === null && next !== "NORMAL") ||
+      (previous !== null && (severityRank(next) > severityRank(previous) || (next === "NORMAL" && previous !== next))))) {
       live = { text: LINES[next][personality], event: `debt_${next.toLowerCase()}`, setAtMs: now };
     }
     previous = next;

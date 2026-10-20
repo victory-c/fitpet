@@ -2,6 +2,7 @@ import { defaultState, readState, type StateReadResult } from "../state.ts";
 import { reactionIsLive } from "../reactions.ts";
 import { tierOf } from "../vitality.ts";
 import type { PetState } from "../types.ts";
+import { notificationStatus, sanitizeNotifications } from "../notifications.ts";
 
 export interface DesktopSnapshot {
   species: string;
@@ -13,6 +14,7 @@ export interface DesktopSnapshot {
   lastSport: string | null;
   lastActivityAt: string | null;
   healthyDays: number;
+  notifications: ReturnType<typeof notificationStatus>;
   reaction: { text: string; event: string; setAtMs: number } | null;
 }
 
@@ -28,6 +30,7 @@ export function snapshotFromState(s: PetState, now = new Date().toISOString()): 
     lastSport: s.fitness.lastSport ?? null,
     lastActivityAt: s.fitness.lastActivityAt ?? null,
     healthyDays: s.healthyDays,
+    notifications: notificationStatus(sanitizeNotifications(s.notifications), Date.parse(now)),
     reaction:
       live && s.reaction ? { text: s.reaction.text, event: s.reaction.event, setAtMs: Date.parse(s.reaction.setAt) } : null,
   };

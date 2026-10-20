@@ -13,7 +13,7 @@ test("state save/load round-trips; missing or corrupt yields a safe default", as
   // missing file -> default egg
   const fresh = loadState();
   assert.equal(fresh.stage, "egg");
-  assert.equal(fresh.schemaVersion, 2);
+  assert.equal(fresh.schemaVersion, 3);
 
   // round trip
   const pet = defaultState();

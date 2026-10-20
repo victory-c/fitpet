@@ -12,6 +12,7 @@ import { speciesOf, DEFAULT_SPECIES } from "./content/species.ts";
 import { isPersonality } from "./content/personalities.ts";
 import { clamp } from "./vitality.ts";
 import { defaultScreenDebt, sanitizeScreenDebt } from "./screen-debt/state.ts";
+import { sanitizeNotifications } from "./notifications.ts";
 
 // FITPET_HOME lets tests point at a temp dir. Read at call-time, not import-time.
 export function fitpetHome(): string {
@@ -45,6 +46,7 @@ export function defaultState(nowIso = new Date().toISOString(), opts: NewPetOpti
     fitness: { rollingScore: START_VITALITY, windowDays: DEFAULT_WINDOW_DAYS, source: null, lastActivityAt: null, lastSport: null, lastSyncAt: null },
     reaction: null,
     screenDebt: defaultScreenDebt(nowIso),
+    notifications: sanitizeNotifications(undefined),
   };
 }
 
@@ -121,6 +123,7 @@ export function sanitizeState(raw: unknown): PetState {
     lastTickAt: isoStr(state.lastTickAt, base.lastTickAt),
     // Old pets start tracking now, not from birth: no surprise historical penalty.
     screenDebt: sanitizeScreenDebt(state.screenDebt, base.lastTickAt),
+    notifications: sanitizeNotifications(state.notifications),
     fitness: {
       rollingScore: clamp(num(rawFitness.rollingScore, START_VITALITY)),
       windowDays: positiveInt(rawFitness.windowDays, DEFAULT_WINDOW_DAYS),
@@ -199,7 +202,7 @@ export function loadState(): PetState {
 }
 
 // Low-level atomic write. Runtime CLI/hook transactions acquire withStateLock BEFORE
-// reading; rename alone cannot prevent lost read-modify-write updates. The desktop is read-only.
+// reading; rename alone cannot prevent lost read-modify-write updates. Desktop settings also lock.
 export function saveState(state: PetState): void {
   const dir = fitpetHome();
   mkdirSync(dir, { recursive: true });
