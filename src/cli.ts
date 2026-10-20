@@ -35,6 +35,8 @@ import { addRecovery, defaultScreenDebt, recoveryId } from "./screen-debt/state.
 import { computeScreenDebt } from "./screen-debt/score.ts";
 import { readActivity } from "./local-activity/log.ts";
 import { clineHookPlan, installClineHooks, uninstallClineHooks } from "./install-cline.ts";
+import { localExpiry, notificationStatus, persistedNudgeHidden, sanitizeNotifications } from "./notifications.ts";
+import { updateNotificationSettings } from "./notification-settings.ts";
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -104,7 +106,10 @@ function renderStatus(s: PetState): string {
     `   rollingScore ${Math.round(s.fitness.rollingScore)} · healthyDays ${s.healthyDays} · age ${s.ageDays}d`,
     `   ${s.pet.personality} · last sync ${s.fitness.lastSyncAt ?? "never"}`,
   ];
-  if (s.reaction) lines.push(`   says: "${s.reaction.text}"`);
+  const notifications = notificationStatus(sanitizeNotifications(s.notifications), Date.now());
+  lines.push(`   nag ${notifications.nagIntensity} · ${notifications.snoozed
+    ? `snoozed · ${notifications.remainingMinutes} min remaining · until ${localExpiry(notifications.snoozedUntil!)}` : "snooze off"}`);
+  if (s.reaction && !persistedNudgeHidden(notifications, s.reaction.event, Date.parse(s.reaction.setAt), Date.now())) lines.push(`   says: "${s.reaction.text}"`);
   const activity = readActivity();
   if (activity.ok) {
     const debt = computeScreenDebt(activity.events, s.screenDebt ?? defaultScreenDebt(nowIso()), new Date());
@@ -120,6 +125,8 @@ function usage(): string {
     "",
     "  status                          print the pet as text (advances the sim; the GUI is the real face)",
     "  tick                            advance the sim (ease + age); never penalizes time",
+    "  snooze <minutes|2h|tomorrow|off>  silence touch-grass and screen-debt bubbles",
+    "  nag gentle|normal|persistent    set nudge intensity (tone is unchanged)",
     "  feed <minutes>                  hand-feed a synthetic workout",
     "  sync [--file <path>]            apply a FitnessSnapshot (--file > stdin > --json); --source --goal",
     "  react <event>                   force a quip for an event",
@@ -139,6 +146,13 @@ function main(): void {
   const [, , cmd = "status", ...rest] = process.argv;
 
   switch (cmd) {
+    case "snooze":
+    case "nag": {
+      if (rest.length !== 1) throw new Error(cmd === "nag" ? "usage: fitpet nag gentle|normal|persistent" : "usage: fitpet snooze <minutes|2h|tomorrow|off>");
+      const state = updateNotificationSettings({ kind: cmd, value: rest[0]! });
+      console.log(renderStatus(state));
+      break;
+    }
     case "cline-install":
     case "cline-uninstall": {
       const host = getFlag(rest, "host");

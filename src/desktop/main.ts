@@ -1,13 +1,19 @@
 // Electron MAIN process = the "brain side" of the window. It REUSES the shared engine
 // (loadState/tierOf/reactionIsLive) — no game logic is duplicated here — serves a read-only
 // snapshot to the renderer, watches the state file so the window reflects feeds/reactions
-// within ~1s, and remembers where you put the window.
+// within ~1s, and remembers where you put the window. Native menu settings are the only
+// pet-state writes here, through the shared lock-protected settings transaction.
 
-import { app, BrowserWindow, ipcMain, screen } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, screen } from "electron";
 import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
 
 import { createCompanionReader } from "./activity-snapshot.ts";
 import { loadBounds, saveBounds, type Bounds } from "./window-store.ts";
+import { createContextMenuTemplate } from "./context-menu.ts";
+
+// FITPET_HOME sandboxes desktop Chromium storage as well as pet/window state.
+if (process.env.FITPET_HOME) app.setPath("userData", resolve(process.env.FITPET_HOME, "electron-user-data"));
 
 const WIDTH = 300;
 const HEIGHT = 410;
@@ -80,6 +86,13 @@ function createWindow(): void {
 
   win.setAlwaysOnTop(true, "screen-saver");
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+
+  win.webContents.on("context-menu", () => {
+    if (!win || win.isDestroyed()) return;
+    const report = (error: unknown) => dialog.showErrorBox("Could not update nudge settings", error instanceof Error ? error.message : "Settings update failed");
+    try { Menu.buildFromTemplate(createContextMenuTemplate(pushIfChanged, report)).popup({ window: win }); }
+    catch (error) { report(error); }
+  });
 
   win.on("closed", () => {
     win = null;

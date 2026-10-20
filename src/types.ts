@@ -9,6 +9,13 @@ export type Stage = "egg" | "hatchling" | "juvenile" | "adult";
 
 export type Personality = "earnest" | "sarcastic" | "chill";
 
+export type NagIntensity = "gentle" | "normal" | "persistent";
+export interface NotificationSettings {
+  nagIntensity: NagIntensity;
+  snoozedUntil: string | null;
+  dismissedThrough?: string; // durable presentation-only cutoff for persisted nudges
+}
+
 // Every event that can produce a quip. Reaction-axis events come from coding hooks
 // (Phase 3); care-axis events come from the feeder/sim (Phase 4 + ticks).
 export type ReactionEvent =
@@ -64,4 +71,5 @@ export interface PetState {
   fitness: FitnessState;
   reaction: Reaction | null;
   screenDebt?: ScreenDebtState; // optional only for older in-memory callers; disk reads migrate
+  notifications?: NotificationSettings; // disk reads backfill older pets
 }

@@ -17,12 +17,28 @@
         user-select: none;
       }
       #stage {
-        -webkit-app-region: drag; /* whole window is a drag handle */
+        -webkit-app-region: no-drag; /* right-click pet, bubble, or labels for controls */
         text-align: center;
+      }
+      #drag-handle {
+        -webkit-app-region: drag;
+        height: 12px;
+        width: 90px;
+        margin: 0 auto;
+        border-top: 2px solid rgba(201, 209, 217, 0.35);
+        box-sizing: border-box;
+      }
+      #snooze-label {
+        height: 15px;
+        line-height: 15px;
+        visibility: hidden;
+        color: #f5d78e;
+        font: 10px/15px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        text-shadow: 0 1px 2px #000;
       }
       /* Reserve space so the sprite never jumps when the bubble shows/hides. */
       #bubble-area {
-        height: 78px;
+        height: 62px;
         display: flex;
         align-items: flex-end;
         justify-content: center;
@@ -92,11 +108,13 @@
   </head>
   <body>
     <div id="stage">
+      <div id="drag-handle" title="Drag here to move Shelldon"></div>
       <div id="bubble-area"><div id="bubble"><span id="bubble-text"></span></div></div>
       <div id="pet-wrap"><canvas id="pet" width="256" height="256"></canvas></div>
       <div id="label">…</div>
       <div id="coding-label" aria-live="polite">No coding activity recorded</div>
       <div id="debt-label" aria-live="polite">Screen debt · awaiting activity</div>
+      <div id="snooze-label" role="status" aria-live="polite"></div>
     </div>
     <script type="module" src="./renderer.ts"></script>
   </body>
