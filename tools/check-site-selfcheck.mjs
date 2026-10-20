@@ -2,12 +2,13 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { checkSite, checkBudgets, expectedQuickStart, parseConcern, parseTags, decodeHTML } from "./check-site.mjs";
+import { checkSite, checkBudgets, expectedQuickStart, parseConcern, parseTags, decodeHTML, CSP } from "./check-site.mjs";
 
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "fitpet-checker-"));
 let count = 0;
 const escape = text => text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
-const positive = `<!doctype html><html lang="en"><head>
+const policy = `<meta http-equiv="Content-Security-Policy" content="${CSP}">`;
+const positive = `<!doctype html><html lang="en"><head>${policy}
 <link rel="canonical" href="https://victory-c.github.io/fitpet/">
 <meta property="og:url" content="https://victory-c.github.io/fitpet/">
 <meta property="og:image" content="https://victory-c.github.io/fitpet/assets/og.png">
@@ -20,15 +21,19 @@ const positive = `<!doctype html><html lang="en"><head>
 <img src="./assets/other.png" loading="lazy" alt="Shell" width="600" height="820">
 <q data-quip>All tests passing. Lovely work.</q><q data-quip>I&apos;m getting worried. A real break would help.</q>
 <section id="quick-start"><pre id="quick-start-code"><code>${escape(expectedQuickStart())}</code></pre></section>
-<p>Boosted, harnesses, unlocked, journeys and shortbread are allowed substrings.</p>
+<p>Shortbread and booster seats are allowed substrings.</p>
 </body></html>`;
 
 function fixture() {
   const root = fs.mkdtempSync(path.join(scratch, "case-"));
   const site = path.join(root, "site"), tools = path.join(root, "tools");
-  fs.mkdirSync(path.join(site, "assets"), { recursive: true }); fs.mkdirSync(tools);
+  fs.mkdirSync(path.join(site, "assets"), { recursive: true }); fs.mkdirSync(path.join(tools, "capture/fixtures"), { recursive: true });
+  fs.writeFileSync(path.join(tools, "capture/og.html"), "<!doctype html><html><head><title>Fitpet</title></head><body><p>A terminal pet.</p></body></html>");
+  fs.writeFileSync(path.join(tools, "capture/fixtures/earnest.json"), JSON.stringify({ reaction: { text: "All tests passing. Lovely work." } }));
+  fs.writeFileSync(path.join(tools, "capture/fixtures/concern.json"), JSON.stringify({ reaction: { text: "I\'m getting worried. A real break would help." } }));
+  fs.writeFileSync(path.join(tools, "capture/fixtures/snoozed.json"), JSON.stringify({ reaction: null }));
   fs.writeFileSync(path.join(site, "index.html"), positive);
-  fs.writeFileSync(path.join(site, "404.html"), '<!doctype html><html><head><link rel="stylesheet" href="/fitpet/style.css?v=1"></head><body><a href="/fitpet/">Back</a><a href="https://github.com/victory-c/fitpet">GitHub</a></body></html>');
+  fs.writeFileSync(path.join(site, "404.html"), `<!doctype html><html><head>${policy}<link rel="stylesheet" href="/fitpet/style.css?v=1"></head><body><a href="/fitpet/">Back</a><a href="https://github.com/victory-c/fitpet">GitHub</a></body></html>`);
   fs.writeFileSync(path.join(site, "style.css"), 'body { color: #fff; background-image: url("./assets/hero.png"); }');
   fs.writeFileSync(path.join(site, "main.js"), 'const video = document.querySelector("video");');
   for (const name of ["hero.png", "other.png", "og.png", "icon.png", "loop.mp4"]) fs.writeFileSync(path.join(site, "assets", name), "fixture bytes");
@@ -100,7 +105,28 @@ try {
   html("meta description banned phrase", "R06", '<body>', '<meta name="description" content="DIVE IN"><body>');
   html("social metadata title banned word", "R06", '<body>', '<meta property="og:title" content="Effortless"><body>');
   html("block boundaries retain phrase spaces", "R06", '<body>', '<body><p>Level</p><p>up</p>');
-  run("inline joining preserves allowed substrings", null, ({ site }) => edit(site, "index.html", '<body>', '<body><p>Boost<em>ed</em> experiences.</p>'));
+  run("inline joining detects inflected banned word", "R06", ({ site }) => edit(site, "index.html", '<body>', '<body><p>Boost<em>ed</em> experiences.</p>'));
+  for (const word of ["boosting", "boosts", "boosted", "harnesses", "unlocked", "journeys", "elevating", "supercharged", "empowering", "game changer", "cutting edge", "next level", "level-up", "whether you’re", "bo\u200bosting", "whether you&#x2019;re"]) html(`normalized inflection ${word}`, "R06", '<body>', `<body><p>${word}</p>`);
+  for (const phrase of ["game-changing", "game changing", "game-changed", "game changes", "game-changers", "leveling up", "levelling up", "leveled up", "levelled up", "levels up", "leveling-up", "levelling-up", "leveled-up", "levelled-up", "harnessing", "harnessed", "harnesses"]) html(`explicit morphology ${phrase}`, "R06", '<body>', `<body><p>${phrase}</p>`);
+  for (const meta of ["og:image:alt", "twitter:image:alt", "custom:image:alt"]) html(`image alt metadata ${meta}`, "R06", '<body>', `<body><meta property="${meta}" content="Boosted">`);
+  run("404 banned copy", "R06", ({ site }) => edit(site, "404.html", 'Back', 'Boosting '));
+  run("404 banned metadata", "R06", ({ site }) => edit(site, "404.html", '<head>', '<head><meta name="twitter:image:alt" content="Boosts">'));
+  run("OG banned copy", "R06", ({ tools }) => edit(tools, "capture/og.html", 'A terminal pet.', 'Boosting'));
+  run("OG banned metadata", "R06", ({ tools }) => edit(tools, "capture/og.html", '<head>', '<head><meta property="og:image:alt" content="Boosted">'));
+  run("missing OG fails closed", "R06", ({ tools }) => fs.unlinkSync(path.join(tools, "capture/og.html")));
+  for (const file of ["index.html", "404.html"]) {
+    run(`${file} missing CSP`, "R11", ({ site }) => edit(site, file, policy, ''));
+    run(`${file} duplicate CSP`, "R11", ({ site }) => edit(site, file, policy, policy + policy));
+    run(`${file} wrong CSP`, "R11", ({ site }) => edit(site, file, "default-src 'none'", "default-src 'self'"));
+    run(`${file} late CSP`, "R11", ({ site }) => edit(site, file, policy, '<link rel="icon" href="' + (file === "404.html" ? '/fitpet/assets/icon.png' : './assets/icon.png') + '">' + policy));
+    run(`${file} CSP after canonical`, "R11", ({ site }) => edit(site, file, policy, '<link rel="canonical" href="https://victory-c.github.io/fitpet/">' + policy));
+  }
+  for (const comment of ['<!-->hidden-->', '<!--->hidden-->', '<!--hidden--!>hidden-->']) html(`unsafe comment ${comment}`, "R04", '<body>', '<body>' + comment);
+  for (const ext of ['svg', 'webp', 'jpg', 'gif', 'avif', 'webm', 'mov', 'woff2', 'json', 'bin', 'wasm', 'mjs', '']) run(`unknown published extension ${ext || '(none)'}`, "R04", ({ site }) => fs.writeFileSync(path.join(site, 'unknown' + (ext ? '.' + ext : '')), 'x'));
+  run("allowed txt", null, ({ site }) => fs.writeFileSync(path.join(site, "robots.txt"), 'User-agent: *'));
+  for (const text of ["Tests passed. Don't let it go to your head.", "All tests passing. Excellent work.", " All tests passing. Lovely work."]) run(`capture non-earnest ${text}`, "R09", ({ tools }) => fs.writeFileSync(path.join(tools, 'capture/fixtures/earnest.json'), JSON.stringify({ reaction: { text } })));
+  for (const value of ['{', '{}', 'null', '[]', '{"reaction":{}}', '{"reaction":{"text":5}}', '{"reaction":[]}', '{"reaction":"All tests passing. Lovely work."}']) run(`malformed capture fixture ${value}`, "R09", ({ tools }) => fs.writeFileSync(path.join(tools, 'capture/fixtures/earnest.json'), value));
+  run("missing capture fixtures fail closed", "R09", ({ tools }) => fs.rmSync(path.join(tools, 'capture/fixtures'), { recursive: true }));
   run("image budget plus one", "R07", ({ site }) => fs.writeFileSync(path.join(site, "assets/other.png"), Buffer.alloc(80001)));
   run("video budget plus one", "R07", ({ site }) => fs.writeFileSync(path.join(site, "assets/loop.mp4"), Buffer.alloc(250001)));
   run("JS budget plus one", "R07", ({ site }) => fs.writeFileSync(path.join(site, "main.js"), " ".repeat(3001)));
@@ -137,7 +163,7 @@ try {
   assert.match(checkBudgets(new Map([["data.bin", 800001]]), new Set())[0].message, /whole site/); count++;
   assert.deepEqual(checkBudgets(new Map([["style.css", 150000]]), new Set(["style.css"])), []);
   assert.match(checkBudgets(new Map([["style.css", 150001]]), new Set(["style.css"]))[0].message, /first load/); count++;
-  console.log(`Checker self-check passed: ${count} assertions/cases, R01–R10 with expected diagnostics; synthetic parser and exact decimal boundaries.`);
+  console.log(`Checker self-check passed: ${count} assertions/cases, R01–R11 with expected diagnostics; synthetic parser and exact decimal boundaries.`);
 } finally {
   fs.rmSync(scratch, { recursive: true, force: true });
 }

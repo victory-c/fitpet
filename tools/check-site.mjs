@@ -9,6 +9,35 @@ const PREFIX = "https://victory-c.github.io/fitpet/";
 const EVENTS = ["session_start", "test_pass", "test_fail", "error", "edit", "long_session", "idle", "fed", "tier_up", "tier_down", "evolved", "revived", "stale"];
 const BANNED = ["revolutionary", "seamless", "unleash", "supercharge", "elevate", "effortless", "game-changer", "empower", "journey", "delve", "cutting-edge", "boost", "harness", "unlock", "next-level", "level up", "say goodbye to", "whether you're", "dive in", "in short"];
 
+export const CSP = "default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self'; media-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'";
+const PUBLISHED = /\.(?:html|css|js|png|ico|mp4|txt)$/;
+
+// Match whole words plus grammatical inflections, never arbitrary substrings.
+function bannedPattern(phrase) {
+  const parts = phrase.split(/[ -]+/);
+  const inflect = word => {
+    const forms = [word, word + "s", word + "es", word + "ed", word + "ing"];
+    if (word.endsWith("e")) forms.push(word.slice(0, -1) + "ing", word + "d");
+    if (word.endsWith("y")) forms.push(word.slice(0, -1) + "ies", word.slice(0, -1) + "ied");
+    // These phrase stems need explicit morphology beyond suffix addition:
+    // game-changer → game-changing; level up → levelling/leveling up.
+    if (word === "changer") forms.push("changing", "changed", "change", "changes");
+    if (word === "level") forms.push("levelled", "levelling");
+    return "(?:" + forms.join("|") + ")";
+  };
+  return new RegExp(`(?<![\\p{L}\\p{N}_])${parts.map(inflect).join("[\\s-]+")}(?![\\p{L}\\p{N}_])`, "iu");
+}
+function checkCopy(text, tags, owner, add) {
+  try {
+    let visible = decodeHTML(text.replace(/<!--[\s\S]*?-->/g, "").replace(/<\/?(?:address|article|aside|blockquote|br|caption|dd|details|div|dl|dt|fieldset|figcaption|figure|footer|form|h[1-6]|header|hr|li|main|nav|ol|p|pre|section|summary|table|tbody|td|th|thead|tr|ul)\b[^>]*>/gi, " ").replace(/<[^>]*>/g, ""));
+    visible += "\n" + tags.flatMap(({ name: tag, attrs: a }) => [a.alt, a.title, a["aria-label"],
+      tag === "meta" && /^(?:description|og:(?:title|description)|twitter:(?:title|description)|.*:image:alt)$/.test(a.property || a.name || "") ? a.content : undefined,
+    ]).filter(value => value !== undefined).join("\n");
+    visible = visible.replace(/[\u200b-\u200d\u2060\ufeff]/g, "").replace(/[‘’]/g, "'");
+    for (const phrase of BANNED) if (bannedPattern(phrase).test(visible)) add("R06", `${owner}: banned phrase: ${phrase}`);
+  } catch (e) { add("R06", `${owner}: ${e.message}`); }
+}
+
 export function decodeHTML(text) {
   const named = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: "\u00a0", rsquo: "’", lsquo: "‘", mdash: "—", ndash: "–", hellip: "…", rarr: "→" };
   return text.replace(/&(#x[\da-f]+|#\d+|[a-z]+);/gi, (all, entity) => {
@@ -57,6 +86,8 @@ export function parseTags(html) {
     if (html.startsWith("<!--", start)) {
       const end = html.indexOf("-->", start + 4);
       if (end < 0) throw Error("unterminated comment");
+      const comment = html.slice(start + 4, end);
+      if (/^(?:>|->)/.test(comment) || comment.includes("--!>")) throw Error("unsafe HTML comment");
       i = end + 3; continue;
     }
     const head = /^<(!doctype\s+html\s*>|\/?[a-z][a-z0-9-]*)/i.exec(html.slice(start));
@@ -125,6 +156,7 @@ export function checkSite(site, { tools = HERE } = {}) {
         if (published) {
           if (stat.nlink > 1) add("R01", `hard link ${rel}`);
           files.set(rel, stat.size);
+          if (!PUBLISHED.test(rel)) add("R04", `unsupported published extension ${rel}`);
         }
         if (/\.(?:[cm]?[jt]s|[jt]sx)$/.test(entry) && (rel.split("/").slice(0, -1).includes("test") || /^test/.test(entry) || /(?:[._-]test)\./.test(entry))) add("R10", `test-discoverable file ${published ? "site" : "tools"}/${rel}`);
       } else if (published) add("R01", `nonregular entry ${rel}`);
@@ -182,19 +214,13 @@ export function checkSite(site, { tools = HERE } = {}) {
         }
         if (Object.keys(a).some(k => /(?:src|href|url|srcset)$/.test(k) && !["src", "href", "srcset"].includes(k) && !k.startsWith("data-"))) add("R04", `${name}: unknown URL attribute`);
       }
+      checkCopy(text, tags, name, add);
+      if (["index.html", "404.html"].includes(name)) {
+        const policies = tags.filter(t => t.name === "meta" && t.attrs["http-equiv"]?.toLowerCase() === "content-security-policy");
+        const resource = tags.find(t => ["link", "script", "img", "video", "audio", "source", "track", "iframe", "object", "embed", "style", "input"].includes(t.name) || Object.keys(t.attrs).some(k => ["src", "srcset", "poster", "background"].includes(k)));
+        if (policies.length !== 1 || policies[0].attrs.content !== CSP || resource && policies[0].start > resource.start) add("R11", `${name}: exact PRD10 CSP required once before any resource tag`);
+      }
       if (name === "index.html") {
-        let visible;
-        try {
-          // Inline phrasing tags do not create word boundaries in rendered text;
-          // block elements do. Preserve that distinction for split-word evasion.
-          visible = decodeHTML(text.replace(/<!--[\s\S]*?-->/g, "").replace(/<\/?(?:address|article|aside|blockquote|br|caption|dd|details|div|dl|dt|fieldset|figcaption|figure|footer|form|h[1-6]|header|hr|li|main|nav|ol|p|pre|section|summary|table|tbody|td|th|thead|tr|ul)\b[^>]*>/gi, " ").replace(/<[^>]*>/g, ""));
-          const attributeText = tags.flatMap(({ name: tag, attrs: a }) => [
-            a.alt, a.title, a["aria-label"],
-            tag === "meta" && /^(?:description|og:(?:title|description)|twitter:(?:title|description))$/.test(a.property || a.name || "") ? a.content : undefined,
-          ]).filter(value => value !== undefined);
-          visible += "\n" + attributeText.join("\n");
-        } catch (e) { add("R06", e.message); visible = text; }
-        for (const word of BANNED) if (new RegExp(`(?<![\\p{L}\\p{N}_])${word.replaceAll(" ", "\\s+")}(?![\\p{L}\\p{N}_])`, "iu").test(visible)) add("R06", `banned phrase: ${word}`);
         const blocks = [...text.matchAll(/<pre\b[^>]*\bid=["']quick-start-code["'][^>]*>\s*<code\b[^>]*>([\s\S]*?)<\/code>\s*<\/pre>/g)];
         try { if (blocks.length !== 1 || decodeHTML(blocks[0][1]) !== expectedQuickStart()) add("R08", "quick-start must match README exactly (clone URL excepted)"); } catch (e) { add("R08", e.message); }
         try {
@@ -218,6 +244,27 @@ export function checkSite(site, { tools = HERE } = {}) {
       if (/["'`]\/(?!\/)/.test(text)) add("R02", `${name}: root-relative JavaScript path`);
     }
   }
+  const og = path.join(tools, "capture/og.html");
+  try {
+    const text = fs.readFileSync(og, "utf8");
+    checkCopy(text, parseTags(text), "tools/capture/og.html", add);
+  } catch (e) { add("R06", `tools/capture/og.html: ${e.message}`); }
+  try {
+    const dir = path.join(tools, "capture/fixtures");
+    const names = fs.readdirSync(dir).filter(name => name.endsWith(".json"));
+    if (!names.length) throw Error("no capture JSON fixtures");
+    const pool = earnestPool();
+    for (const name of names) {
+      try {
+        const file = path.join(dir, name);
+        if (!fs.lstatSync(file).isFile() || fs.lstatSync(file).isSymbolicLink()) throw Error("not an ordinary fixture file");
+        const fixture = JSON.parse(fs.readFileSync(file, "utf8"));
+        if (!fixture || typeof fixture !== "object" || Array.isArray(fixture) || !Object.hasOwn(fixture, "reaction")) throw Error("missing reaction");
+        // Explicit null represents no displayed quotation (e.g. snoozed).
+        if (fixture.reaction !== null && (!fixture.reaction || typeof fixture.reaction !== "object" || Array.isArray(fixture.reaction) || typeof fixture.reaction.text !== "string" || !pool.has(fixture.reaction.text))) throw Error("reaction.text is not an exact earnest quip");
+      } catch (e) { add("R09", `tools/capture/fixtures/${name}: ${e.message}`); }
+    }
+  } catch (e) { add("R09", `capture fixtures: ${e.message}`); }
   diagnostics.push(...checkBudgets(files, first));
   return diagnostics;
 }
@@ -227,6 +274,6 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     const diagnostics = checkSite(process.argv[2] || path.join(REPO, "site"));
     for (const { code, message } of diagnostics) console.error(`${code} ${message}`);
     if (diagnostics.length) process.exitCode = 1;
-    else console.log("Site checker passed R01–R10 (decimal byte budgets).");
+    else console.log("Site checker passed R01–R11 (decimal byte budgets).");
   } catch (error) { console.error(`R01 checker failed closed: ${error.message}`); process.exitCode = 1; }
 }

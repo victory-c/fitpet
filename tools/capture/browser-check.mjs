@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { mkdir, writeFile, realpath } from 'node:fs/promises';
 import { resolve, dirname, basename, join } from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { chromium } from 'playwright';
 
 const args = process.argv.slice(2);
@@ -14,7 +15,7 @@ assert.equal(base.pathname, '/fitpet/');
 assert.equal(base.origin, 'http://127.0.0.1:8000');
 const output = resolve(option('--output-dir'));
 const repo = resolve(import.meta.dirname, '../..');
-const protectedRepo = '/Users/victorchun/fitpet';
+const protectedRepo = resolve(repo, execFileSync('git', ['rev-parse', '--git-common-dir'], { cwd: repo, encoding: 'utf8' }).trim(), '..');
 const outsideRepos = (path) => [repo, protectedRepo].every((root) => path !== root && !path.startsWith(root + '/'));
 assert(outsideRepos(output), 'Screenshots must be outside both repositories');
 let ancestor = output;
@@ -85,6 +86,23 @@ async function scenario({ theme = 'dark', width = 1280, js = true, motion = 'red
     if (box && box.y >= 900 && await image.getAttribute('fetchpriority') !== 'high') assert.equal(await image.getAttribute('loading'), 'lazy', 'Below-fold non-hero image must be lazy');
   }
   assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${name}: horizontal overflow`);
+  if (width <= 600) {
+    for (const table of await page.locator('table').all()) {
+      assert(await table.evaluate((element) => element.scrollWidth <= element.clientWidth + 1), `${name}: table columns must not clip`);
+      for (const cell of await table.locator('th,td').all()) {
+        const bounds = await cell.boundingBox();
+        assert(bounds && bounds.x >= 0 && bounds.x + bounds.width <= width + 1, `${name}: every table cell fits the viewport`);
+      }
+    }
+    const experimental = page.getByRole('cell', { name: 'Yes — experimental, not tested on a live install yet', exact: true });
+    assert(await experimental.isVisible(), `${name}: experimental Cline caveat visible`);
+  }
+  for (const image of await page.locator('main img').all()) {
+    const bounds = await image.boundingBox();
+    assert(bounds && bounds.width <= 300, `${name}: renderer maximum width 300px`);
+    if (width >= 360) assert.equal(bounds.width, 300, `${name}: renderer width exactly 300px when space permits`);
+    if (bounds.width < 300) assert.equal(await image.evaluate((element) => getComputedStyle(element).imageRendering), 'auto');
+  }
   const contrastFailures = await page.evaluate(() => {
     const rgb = (value) => value.match(/[\d.]+/g).map(Number);
     const luminance = (color) => color.slice(0, 3).map((value) => {
@@ -156,6 +174,7 @@ async function scenario({ theme = 'dark', width = 1280, js = true, motion = 'red
   assert(await details.evaluate((element) => element.open), 'Score explanation opens from keyboard');
   await page.keyboard.press('Enter');
   assert(!await details.evaluate((element) => element.open));
+  await details.locator('summary').evaluate((element) => element.blur());
   // Scroll through lazy images so review screenshots contain decoded imagery.
   for (const image of await page.locator('img').all()) await image.scrollIntoViewIfNeeded();
   await page.evaluate(() => scrollTo(0, 0));
@@ -195,6 +214,9 @@ try {
     await scenario({ theme, width: 360, name: `mobile-${theme}` });
   }
   await scenario({ width: 320, name: 'narrow-320' });
+  for (const width of [600, 799, 800, 899, 900]) {
+    await scenario({ width, name: `breakpoint-${width}` });
+  }
   await scenario({ js: false, name: 'javascript-disabled' });
   await scenario({ motion: 'no-preference', name: 'motion-enabled' });
   await writeFile(resolve(output, 'browser-report.json'), JSON.stringify(report, null, 2) + '\n');
