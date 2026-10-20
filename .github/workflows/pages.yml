@@ -5,21 +5,23 @@ on:
     branches: [main]
     paths:
       - "site/**"
+      - "tools/capture/fixtures/**"
+      - "tools/capture/og.html"
       - "tools/check-site.mjs"
       - "tools/check-site-selfcheck.mjs"
       - ".github/workflows/pages.yml"
       - "README.md"
-      - "src/config.ts"
       - "src/content/quips.ts"
       - "src/screen-debt/concern.ts"
   pull_request:
     paths:
       - "site/**"
+      - "tools/capture/fixtures/**"
+      - "tools/capture/og.html"
       - "tools/check-site.mjs"
       - "tools/check-site-selfcheck.mjs"
       - ".github/workflows/pages.yml"
       - "README.md"
-      - "src/config.ts"
       - "src/content/quips.ts"
       - "src/screen-debt/concern.ts"
   workflow_dispatch:

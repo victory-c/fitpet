@@ -12,10 +12,11 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '../..');
 const output = join(root, 'site/assets');
 const args = process.argv.slice(2);
-assert(args.length === 0 || (args.length === 2 && args[0] === '--output' && resolve(args[1]) === output), 'Usage: capture.mjs [--output /Users/victorchun/fitpet-site/site/assets]');
+assert(args.length === 0 || (args.length === 2 && args[0] === '--output' && resolve(args[1]) === output), 'Usage from repository root: node tools/capture/capture.mjs [--output site/assets]');
 const names = ['hero', 'touch-grass', 'debt', 'snoozed'];
 const temp = await mkdtemp(join(tmpdir(), 'fitpet-capture-'));
 console.log(`CAPTURE_TMP=${temp}`);
+const staged = join(temp, 'assets');
 let browser, server;
 const report = { browser: 'Playwright 1.63.0 / Chromium revision 1243', assets: [], checks: [], loop: 'Omitted: test-pass flash ends at 1500ms, so first/last screen states do not match. No seamless-loop claim.' };
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -23,8 +24,20 @@ function ffmpeg(args) {
   execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...args], { stdio: 'pipe' });
 }
 async function png(input, name, width, height, filters) {
-  const path = join(output, name);
-  ffmpeg(['-i', input, ...(filters ? ['-vf', filters] : []), '-frames:v', '1', '-map_metadata', '-1', '-c:v', 'png', '-compression_level', '9', path]);
+  const path = join(staged, name);
+  // RGB conversion is allowed only when the composited source is fully opaque.
+  const decode = (file, filter) => execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', file, ...(filter ? ['-vf', filter] : []), '-frames:v', '1', '-f', 'rawvideo', '-pix_fmt', 'rgba', '-'], { maxBuffer: 16 * 1024 * 1024 });
+  const sourcePixels = decode(input, filters);
+  const opaque = sourcePixels.every((byte, i) => i % 4 !== 3 || byte === 255);
+  let best;
+  for (const prediction of ['none', 'sub', 'up', 'avg', 'paeth', 'mixed']) {
+    const candidate = join(temp, `${name}-${prediction}.png`);
+    ffmpeg(['-i', input, ...(filters ? ['-vf', filters] : []), '-frames:v', '1', '-map_metadata', '-1', '-pix_fmt', opaque ? 'rgb24' : 'rgba', '-c:v', 'png', '-pred', prediction, '-compression_level', '9', candidate]);
+    const bytes = await readFile(candidate);
+    if (!best || bytes.length < best.bytes.length) best = { prediction, bytes };
+  }
+  await writeFile(path, best.bytes);
+  assert(sourcePixels.equals(decode(path)), `${name}: lossless decoded pixels must match`);
   const encoded = await readFile(path);
   // ffmpeg emits pHYs even with -map_metadata -1. Keep only image-critical
   // chunks, stripping that ancillary density metadata without re-encoding.
@@ -40,7 +53,7 @@ async function png(input, name, width, height, filters) {
   assert.equal(data.readUInt32BE(16), width);
   assert.equal(data.readUInt32BE(20), height);
   assert(data.length <= 80000, `${name} exceeds 80,000 bytes`);
-  report.assets.push({ name, width, height, bytes: data.length, target55000: data.length <= 55000 });
+  report.assets.push({ name, width, height, bytes: data.length, target55000: data.length <= 55000, prediction: best.prediction, pixelFormat: opaque ? 'rgb24' : 'rgba', sha256: hash(data) });
 }
 try {
   const manifest = JSON.parse(await readFile(join(here, 'node_modules/playwright-core/browsers.json')));
@@ -52,11 +65,11 @@ try {
   let html = await readFile(join(served, 'index.html'), 'utf8');
   assert(html.includes('id="snooze-label"'), 'Fresh renderer build required');
   html = html.replace(/<script type="module"/, '<script src="./shim.js"></script><script type="module"');
-  html = html.replace('</head>', '<style>html,body{background:#06140b}</style></head>');
+  html = html.replace('</head>', '<link rel="stylesheet" href="./shim.css"></head>');
   await writeFile(join(served, 'index.html'), html);
-  for (const name of ['shim.js', 'og.html', 'og.css']) await cp(join(here, name), join(served, name));
+  for (const name of ['shim.js', 'shim.css', 'og.html', 'og.css']) await cp(join(here, name), join(served, name));
   await mkdir(join(temp, 'frames'));
-  await mkdir(output, { recursive: true });
+  await mkdir(staged);
   server = createServer(async (req, res) => {
     try {
       const pathname = decodeURIComponent(new URL(req.url, 'http://127.0.0.1').pathname);
@@ -85,13 +98,28 @@ try {
   for (const name of names) {
     const fixture = JSON.parse(await readFile(join(here, 'fixtures', `${name}.json`)));
     const expectedQuips = { hero: 'All tests passing. Lovely work.', 'touch-grass': "You've been at this a while — go touch grass?", debt: "I'm getting worried. A real break would help.", snoozed: null };
-    assert.equal(fixture.reaction?.text ?? null, expectedQuips[name], 'Approved earnest quip only');
+    assert(Object.hasOwn(fixture, 'reaction'), 'reaction property required');
+    if (fixture.reaction !== null) assert.equal(typeof fixture.reaction?.text, 'string');
+    assert.equal(fixture.reaction === null ? null : fixture.reaction.text, expectedQuips[name], 'Approved earnest quip only');
     assert.equal(fixture.tier, fixture.vitality >= 75 ? 'thriving' : fixture.vitality >= 45 ? 'healthy' : fixture.vitality >= 15 ? 'wilting' : 'dormant');
     const minutes = fixture.coding.currentCodingSessionMinutes;
     assert.equal(fixture.screenDebt.score, Math.round(.25 * Math.max(0, Math.min(minutes, 60) - 30) + .5 * Math.max(0, minutes - 60)));
     await writeFile(join(served, 'fixture.json'), JSON.stringify(fixture));
     await page.goto(origin, { waitUntil: 'networkidle' });
     await page.waitForFunction(() => window.__capture?.loaded && document.querySelector('#label').textContent.includes('Shelldon'));
+    await page.evaluate(() => document.fonts.ready);
+    assert.equal(await page.locator('#drag-handle').evaluate(el => getComputedStyle(el).display), 'none');
+    if (name === 'hero') {
+      const fonts = await page.evaluate(() => {
+        const canvas = document.createElement('canvas'), ctx = canvas.getContext('2d');
+        const measure = font => { ctx.font = `16px ${font}`; return ctx.measureText('Shelldon · Coding 0123456789').width; };
+        return { renderer: getComputedStyle(document.querySelector('#label')).fontFamily, menlo: measure('Menlo'), fallback: measure('monospace') };
+      });
+      assert.notEqual(fonts.menlo, fonts.fallback, 'Menlo must be installed, not silently substituted');
+      report.environment = { platform: process.platform, arch: process.arch, ffmpeg: execFileSync('ffmpeg', ['-version'], { encoding: 'utf8' }).split('\n')[0], fonts };
+      const previous = JSON.parse(await readFile(join(here, 'capture-report.json'), 'utf8'));
+      if (previous.environment) assert.deepEqual(report.environment, previous.environment, 'Capture environment/font drift: review before updating baseline');
+    }
     await page.mouse.move(150, 200); // Show the actual hover-only name; no label edits.
     const clock = await page.evaluate(() => { let result; for (let i = 0; i < 10; i++) result = window.__capture.step(); return result; });
     assert(clock.elapsed >= 300);
@@ -138,7 +166,7 @@ try {
   const shell = 'crop=136:96:60:16,pad=144:144:4:24:color=0x06140b';
   await png(join(temp, 'canvas.png'), 'favicon-32.png', 32, 32, `${shell},scale=32:32:flags=neighbor`);
   await png(join(temp, 'canvas.png'), 'apple-touch-icon.png', 180, 180, `${shell},scale=180:180:flags=neighbor`);
-  await cp(join(output, 'hero-poster.png'), join(served, 'hero-poster.png'));
+  await cp(join(staged, 'hero-poster.png'), join(served, 'hero-poster.png'));
   await page.setViewportSize({ width: 1280, height: 640 });
   // OG uses DSF1: no DOM text post-upscaling.
   const og = await browser.newPage({ viewport: { width: 1280, height: 640 }, deviceScaleFactor: 1 });
@@ -151,11 +179,21 @@ try {
     return route.continue();
   });
   await og.goto(`${origin}/og.html`, { waitUntil: 'networkidle' });
+  await og.evaluate(() => document.fonts.ready);
   await og.screenshot({ path: join(temp, 'og.png'), animations: 'disabled' });
-  await png(join(temp, 'og.png'), 'og-v1.png', 1280, 640);
+  await png(join(temp, 'og.png'), 'og-v2.png', 1280, 640);
   assert.deepEqual(external, []); assert.deepEqual(errors, []); assert.deepEqual(resourceFailures, []);
   report.checks.push({ externalRequests: external, rendererAndOgErrors: errors, resourceFailures });
-  await writeFile(join(here, 'capture-report.json'), JSON.stringify(report, null, 2) + '\n');
+  const inventory = [...names.map(name => name === 'hero' ? 'hero-poster.png' : `${name}.png`), 'favicon-32.png', 'apple-touch-icon.png', 'og-v2.png'];
+  assert.deepEqual(report.assets.map(asset => asset.name), inventory);
+  for (const asset of report.assets) assert.equal(hash(await readFile(join(staged, asset.name))), asset.sha256);
+  const reportBytes = JSON.stringify(report, null, 2) + '\n';
+  await writeFile(join(temp, 'capture-report.json'), reportBytes);
+  // Publication begins only after the entire staged inventory and report pass.
+  await mkdir(output, { recursive: true });
+  for (const name of inventory) await cp(join(staged, name), join(output, name));
+  await rm(join(output, 'og-v1.png'), { force: true });
+  await cp(join(temp, 'capture-report.json'), join(here, 'capture-report.json'));
   console.log(JSON.stringify(report, null, 2));
 } finally {
   try {

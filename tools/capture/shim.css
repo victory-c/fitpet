@@ -1,0 +1,3 @@
+/* Capture environment only: opaque compositing and no window drag affordance. */
+html, body { background: #06140b; }
+#drag-handle { display: none !important; }
