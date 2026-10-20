@@ -1,0 +1,31 @@
+{
+  "species": "sprout",
+  "name": "Shelldon",
+  "tier": "thriving",
+  "stage": "adult",
+  "vitality": 88,
+  "rollingScore": 88,
+  "lastSport": null,
+  "lastActivityAt": null,
+  "healthyDays": 21,
+  "reaction": {
+    "text": "All tests passing. Lovely work.",
+    "event": "test_pass",
+    "setAtMs": 1792497600000
+  },
+  "notifications": {
+    "snoozed": false,
+    "remainingMinutes": 0,
+    "snoozedUntil": null
+  },
+  "screenDebt": {
+    "score": 3,
+    "severity": "NORMAL"
+  },
+  "coding": {
+    "active": true,
+    "currentCodingSessionMinutes": 42,
+    "lastActivityAt": "2026-10-20T12:00:00.000Z"
+  },
+  "activityStatus": "ready"
+}

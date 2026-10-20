@@ -1,0 +1,31 @@
+{
+  "species": "sprout",
+  "name": "Shelldon",
+  "tier": "healthy",
+  "stage": "adult",
+  "vitality": 60,
+  "rollingScore": 60,
+  "lastSport": null,
+  "lastActivityAt": null,
+  "healthyDays": 21,
+  "reaction": {
+    "text": "You've been at this a while — go touch grass?",
+    "event": "long_session",
+    "setAtMs": 1792497600000
+  },
+  "notifications": {
+    "snoozed": false,
+    "remainingMinutes": 0,
+    "snoozedUntil": null
+  },
+  "screenDebt": {
+    "score": 8,
+    "severity": "NORMAL"
+  },
+  "coding": {
+    "active": true,
+    "currentCodingSessionMinutes": 61,
+    "lastActivityAt": "2026-10-20T12:00:00.000Z"
+  },
+  "activityStatus": "ready"
+}
