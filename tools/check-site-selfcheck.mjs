@@ -1,0 +1,143 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { checkSite, checkBudgets, expectedQuickStart, parseConcern, parseTags, decodeHTML } from "./check-site.mjs";
+
+const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "fitpet-checker-"));
+let count = 0;
+const escape = text => text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+const positive = `<!doctype html><html lang="en"><head>
+<link rel="canonical" href="https://victory-c.github.io/fitpet/">
+<meta property="og:url" content="https://victory-c.github.io/fitpet/">
+<meta property="og:image" content="https://victory-c.github.io/fitpet/assets/og.png">
+<meta name="twitter:image" content="https://victory-c.github.io/fitpet/assets/og.png">
+<link rel="stylesheet" href="./style.css?v=1"><link rel="icon" href="./assets/icon.png">
+<script src="./main.js?v=1" defer></script></head><body>
+<a href="https://github.com/victory-c/fitpet">GitHub</a><a href="#quick-start">Quick start</a>
+<video controls muted playsinline preload="none" poster="./assets/hero.png"><source src="./assets/loop.mp4" type="video/mp4"></video>
+<img src="./assets/hero.png" srcset="./assets/hero.png 1x, ./assets/other.png 2x" alt="Shell" width="600" height="820">
+<img src="./assets/other.png" loading="lazy" alt="Shell" width="600" height="820">
+<q data-quip>All tests passing. Lovely work.</q><q data-quip>I&apos;m getting worried. A real break would help.</q>
+<section id="quick-start"><pre id="quick-start-code"><code>${escape(expectedQuickStart())}</code></pre></section>
+<p>Boosted, harnesses, unlocked, journeys and shortbread are allowed substrings.</p>
+</body></html>`;
+
+function fixture() {
+  const root = fs.mkdtempSync(path.join(scratch, "case-"));
+  const site = path.join(root, "site"), tools = path.join(root, "tools");
+  fs.mkdirSync(path.join(site, "assets"), { recursive: true }); fs.mkdirSync(tools);
+  fs.writeFileSync(path.join(site, "index.html"), positive);
+  fs.writeFileSync(path.join(site, "404.html"), '<!doctype html><html><head><link rel="stylesheet" href="/fitpet/style.css?v=1"></head><body><a href="/fitpet/">Back</a><a href="https://github.com/victory-c/fitpet">GitHub</a></body></html>');
+  fs.writeFileSync(path.join(site, "style.css"), 'body { color: #fff; background-image: url("./assets/hero.png"); }');
+  fs.writeFileSync(path.join(site, "main.js"), 'const video = document.querySelector("video");');
+  for (const name of ["hero.png", "other.png", "og.png", "icon.png", "loop.mp4"]) fs.writeFileSync(path.join(site, "assets", name), "fixture bytes");
+  return { site, tools };
+}
+function edit(site, file, from, to) {
+  const target = path.join(site, file), text = fs.readFileSync(target, "utf8");
+  assert.ok(text.includes(from), `mutation target missing: ${from}`);
+  fs.writeFileSync(target, text.replace(from, to));
+}
+function run(label, expected, mutate = () => {}) {
+  const f = fixture(); mutate(f);
+  const diagnostics = checkSite(f.site, { tools: f.tools });
+  if (expected) assert.ok(diagnostics.some(d => d.code === expected && typeof d.message === "string" && d.message.length), `${label}: expected ${expected}, got ${JSON.stringify(diagnostics)}`);
+  else assert.deepEqual(diagnostics, [], label);
+  count++; console.log(`ok ${count} ${label}${expected ? ` → ${expected}` : ""}`);
+}
+function html(label, code, from, to) { run(label, code, ({ site }) => edit(site, "index.html", from, to)); }
+
+try {
+  run("positive fixture; same-tab external anchors, lazy image, entities and allowed word substrings", null);
+  run("missing index", "R01", ({ site }) => fs.unlinkSync(path.join(site, "index.html")));
+  run("uppercase filename", "R01", ({ site }) => fs.writeFileSync(path.join(site, "assets/Upper.png"), "x"));
+  run("symlink", "R01", ({ site }) => fs.symlinkSync("hero.png", path.join(site, "assets/link.png")));
+  run("hard link", "R01", ({ site }) => fs.linkSync(path.join(site, "assets/hero.png"), path.join(site, "assets/link.png")));
+  html("root-relative image", "R02", './assets/hero.png', '/assets/hero.png');
+  run("root-relative CSS", "R02", ({ site }) => edit(site, "style.css", './assets/hero.png', '/assets/hero.png'));
+  run("root-relative JS", "R02", ({ site }) => fs.appendFileSync(path.join(site, "main.js"), '\nconst x = "/assets/x.png";'));
+  html("wrong-case path even on case-insensitive filesystem", "R03", './assets/hero.png', './assets/Hero.png');
+  html("missing poster", "R03", 'poster="./assets/hero.png"', 'poster="./assets/missing.png"');
+  html("missing srcset member", "R03", './assets/other.png 2x', './assets/missing.png 2x');
+  html("traversal", "R03", './assets/hero.png', '../outside.png');
+  html("encoded traversal", "R03", './assets/hero.png', './assets/%2e%2e/hero.png');
+  html("encoded slash escape", "R03", './assets/hero.png', './assets/%2e%2e%2fhero.png');
+  html("malformed encoding", "R03", './assets/hero.png', './assets/%zz.png');
+  html("external image", "R04", './assets/hero.png', 'https://example.org/x.png');
+  html("protocol-relative image", "R04", './assets/hero.png', '//example.org/x.png');
+  html("external script", "R04", './main.js?v=1', 'https://example.org/x.js');
+  run("external CSS URL", "R04", ({ site }) => edit(site, "style.css", './assets/hero.png', 'https://example.org/x.png'));
+  run("CSS import", "R04", ({ site }) => fs.appendFileSync(path.join(site, "style.css"), '@import "https://example.org/x.css";'));
+  run("escaped CSS resource syntax", "R04", ({ site }) => fs.appendFileSync(path.join(site, "style.css"), 'a{background:u\\72l(https://example.org/x)}'));
+  html("inline style", "R04", '<body>', '<body style="background:url(https://example.org/x)">');
+  html("unquoted resource attribute", "R04", 'src="./assets/hero.png"', 'src=./assets/hero.png');
+  html("duplicate attribute", "R04", 'poster="./assets/hero.png"', 'poster="./assets/hero.png" poster="https://example.org/x"');
+  html("inline script", "R04", '<body>', '<body><script>fetch("https://example.org/")</script>');
+  html("video preload auto forbidden", "R04", 'preload="none"', 'preload="auto"');
+  html("video preload metadata forbidden", "R04", 'preload="none"', 'preload="metadata"');
+  html("video missing explicit preload", "R04", 'preload="none"', '');
+  for (const [label, script] of [
+    ["beacon request", 'navigator.sendBeacon("https://example.org/", "data");'],
+    ["computed resource assignment", 'img["src"] = "https://example.org/x.png";'],
+    ["dynamic computed resource assignment", 'img[key] = "https://example.org/x.png";'],
+    ["innerHTML resource injection", 'element.innerHTML = \'<img src="https://example.org/x.png">\';'],
+    ["outerHTML resource injection", 'element.outerHTML = \'<img src="https://example.org/x.png">\';'],
+    ["adjacent HTML resource injection", 'element.insertAdjacentHTML("beforeend", \'<img src="https://example.org/x.png">\');'],
+  ]) run(label, "R04", ({ site }) => fs.appendFileSync(path.join(site, "main.js"), script));
+  html("unsupported embed", "R04", '<body>', '<body><iframe src="https://example.org/"></iframe>');
+  html("wrong OG prefix", "R05", 'content="https://victory-c.github.io/fitpet/assets/og.png"', 'content="https://example.org/fitpet/assets/og.png"');
+  html("lookalike metadata base", "R05", 'href="https://victory-c.github.io/fitpet/"', 'href="https://victory-c.github.io/fitpet.evil/"');
+  run("relative 404 stylesheet", "R05", ({ site }) => edit(site, "404.html", '/fitpet/style.css?v=1', './style.css?v=1'));
+  html("mixed-case banned phrase", "R06", '<body>', '<body><p>SaY GoOdByE To repetitive work.</p>');
+  html("boundary banned word", "R06", '<body>', '<body><p>A BOOST.</p>');
+  html("entity encoded banned phrase", "R06", '<body>', '<body><p>LeVel&#32;UP</p>');
+  html("inline-tag split banned word", "R06", '<body>', '<body><p>Revo<em>lutionary</em>.</p>');
+  html("inline-tag split banned phrase", "R06", '<body>', '<body><p>Say <span>goodbye</span> to repetitive work.</p>');
+  html("alt text banned word", "R06", 'alt="Shell"', 'alt="ReVoLuTionary shell"');
+  html("title attribute banned phrase", "R06", '<body>', '<body title="Level up">');
+  html("accessible label banned word", "R06", '<body>', '<body aria-label="Unleash">');
+  html("meta description banned phrase", "R06", '<body>', '<meta name="description" content="DIVE IN"><body>');
+  html("social metadata title banned word", "R06", '<body>', '<meta property="og:title" content="Effortless"><body>');
+  html("block boundaries retain phrase spaces", "R06", '<body>', '<body><p>Level</p><p>up</p>');
+  run("inline joining preserves allowed substrings", null, ({ site }) => edit(site, "index.html", '<body>', '<body><p>Boost<em>ed</em> experiences.</p>'));
+  run("image budget plus one", "R07", ({ site }) => fs.writeFileSync(path.join(site, "assets/other.png"), Buffer.alloc(80001)));
+  run("video budget plus one", "R07", ({ site }) => fs.writeFileSync(path.join(site, "assets/loop.mp4"), Buffer.alloc(250001)));
+  run("JS budget plus one", "R07", ({ site }) => fs.writeFileSync(path.join(site, "main.js"), " ".repeat(3001)));
+  run("first load budget plus one", "R07", ({ site }) => {
+    const sizes = ["index.html", "style.css", "main.js", "assets/icon.png", "assets/hero.png", "assets/other.png"].reduce((sum, name) => sum + fs.statSync(path.join(site, name)).size, 0);
+    fs.appendFileSync(path.join(site, "style.css"), " ".repeat(150001 - sizes));
+  });
+  run("whole site budget plus one", "R07", ({ site }) => {
+    let size = 0;
+    for (const name of fs.readdirSync(site, { recursive: true })) { const s = fs.statSync(path.join(site, name)); if (s.isFile()) size += s.size; }
+    fs.writeFileSync(path.join(site, "extra.bin"), Buffer.alloc(800001 - size));
+  });
+  html("quick-start comment drift", "R08", '# start a fresh egg', '# start an egg');
+  html("quick-start spacing drift", "R08", 'npm install                              #', 'npm install                             #');
+  html("quick-start command drift", "R08", 'node src/cli.ts reset --name Shelldon', 'node src/cli.ts reset --name Other');
+  html("quick-start clone drift", "R08", 'git clone https://github.com/victory-c/fitpet.git', 'git clone https://example.org/fitpet.git');
+  html("invented quotation", "R09", 'All tests passing. Lovely work.', 'All tests passing. Excellent work.');
+  html("real sarcastic quotation rejected", "R09", 'All tests passing. Lovely work.', "Tests passed. Don't let it go to your head.");
+  for (const name of ["sample.test.mjs", "test-helper.js", "helper-test.ts", "helper_test.cjs", "test/nested.js"]) {
+    for (const area of ["site", "tools"]) run(`${area} discovery ${name}`, "R10", f => { const dest = path.join(f[area], name); fs.mkdirSync(path.dirname(dest), { recursive: true }); fs.writeFileSync(dest, ""); });
+  }
+  const concern = n => `const LINES: Record<Severity, Record<Personality, string>> = {\n${Array.from({ length: n }, (_, i) => `  B${i}: { earnest: "line ${i}", sarcastic: "other" },`).join("\n")}\n};`;
+  assert.deepEqual(parseConcern(concern(4)), ["line 0", "line 1", "line 2", "line 3"]); count++;
+  for (const n of [3, 5]) { assert.throws(() => parseConcern(concern(n)), /R09 expected exactly 4/); count++; }
+  assert.throws(() => parseConcern('const OTHER = {};'), /R09/); count++;
+  assert.equal(decodeHTML('I&#39;m &amp; &#x1f33f;'), "I'm & 🌿"); count++;
+  assert.throws(() => parseTags('<img src=unquoted>'), /attribute/); count++;
+  // Test byte arithmetic independently at exact boundaries and one byte over.
+  for (const [file, limit] of [["asset.png", 80000], ["loop.mp4", 250000], ["main.js", 3000]]) {
+    assert.deepEqual(checkBudgets(new Map([[file, limit]]), new Set()), []);
+    assert.ok(checkBudgets(new Map([[file, limit + 1]]), new Set()).some(d => d.code === "R07" && d.message.includes(file))); count++;
+  }
+  assert.deepEqual(checkBudgets(new Map([["data.bin", 800000]]), new Set()), []);
+  assert.match(checkBudgets(new Map([["data.bin", 800001]]), new Set())[0].message, /whole site/); count++;
+  assert.deepEqual(checkBudgets(new Map([["style.css", 150000]]), new Set(["style.css"])), []);
+  assert.match(checkBudgets(new Map([["style.css", 150001]]), new Set(["style.css"]))[0].message, /first load/); count++;
+  console.log(`Checker self-check passed: ${count} assertions/cases, R01–R10 with expected diagnostics; synthetic parser and exact decimal boundaries.`);
+} finally {
+  fs.rmSync(scratch, { recursive: true, force: true });
+}
