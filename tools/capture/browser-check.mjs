@@ -86,7 +86,7 @@ async function scenario({ theme = 'dark', width = 1280, js = true, motion = 'red
     if (box && box.y >= 900 && await image.getAttribute('fetchpriority') !== 'high') assert.equal(await image.getAttribute('loading'), 'lazy', 'Below-fold non-hero image must be lazy');
   }
   assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${name}: horizontal overflow`);
-  if (width <= 600) {
+  if (width <= 680) {
     for (const table of await page.locator('table').all()) {
       assert(await table.evaluate((element) => element.scrollWidth <= element.clientWidth + 1), `${name}: table columns must not clip`);
       for (const cell of await table.locator('th,td').all()) {
@@ -97,11 +97,53 @@ async function scenario({ theme = 'dark', width = 1280, js = true, motion = 'red
     const experimental = page.getByRole('cell', { name: 'Yes — experimental, not tested on a live install yet', exact: true });
     assert(await experimental.isVisible(), `${name}: experimental Cline caveat visible`);
   }
+  if (width === 320 || width === 360) {
+    // Check actual glyph geometry, not merely CSS declarations. Code paths and
+    // commands intentionally retain overflow-wrap:anywhere; prose must not.
+    const brokenWords = await page.locator('th,td').evaluateAll((cells) => {
+      const broken = [];
+      for (const cell of cells) {
+        const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          if (node.parentElement.closest('code')) continue;
+          for (const word of node.textContent.matchAll(/\p{L}+/gu)) {
+            const range = document.createRange();
+            range.setStart(node, word.index);
+            range.setEnd(node, word.index + word[0].length);
+            const lines = new Set([...range.getClientRects()].filter((rect) => rect.width > 0).map((rect) => Math.round(rect.top)));
+            if (lines.size > 1) broken.push(word[0]);
+          }
+        }
+      }
+      return broken;
+    });
+    assert.deepEqual(brokenWords, [], `${name}: table prose must not break words across lines`);
+    for (const cell of await page.locator('th,td').all()) {
+      assert.deepEqual(await cell.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return [style.overflowWrap, style.hyphens];
+      }), ['break-word', 'auto'], `${name}: table wrapping policy`);
+    }
+  }
   for (const image of await page.locator('main img').all()) {
     const bounds = await image.boundingBox();
     assert(bounds && bounds.width <= 300, `${name}: renderer maximum width 300px`);
-    if (width >= 360) assert.equal(bounds.width, 300, `${name}: renderer width exactly 300px when space permits`);
+    const figureWidth = await image.evaluate((element) => element.closest('figure').getBoundingClientRect().width);
+    if (figureWidth >= 304) assert.equal(bounds.width, 300, `${name}: renderer width exactly 300px when space permits`);
     if (bounds.width < 300) assert.equal(await image.evaluate((element) => getComputedStyle(element).imageRendering), 'auto');
+  }
+  const stills = page.locator('#what-he-does > .stills');
+  assert.equal(await stills.count(), 1, `${name}: stills belong to What he does`);
+  assert(await stills.evaluate((element) => element.previousElementSibling?.classList.contains('features')), `${name}: stills follow features directly`);
+  const figures = await stills.locator('figure').evaluateAll((elements) => elements.map((element) => {
+    const box = element.getBoundingClientRect();
+    return { x: box.x, y: box.y };
+  }));
+  assert.equal(new Set(figures.map(({ y }) => Math.round(y))).size, width >= 800 ? 1 : 3, `${name}: three in one row or one column, never 2+1`);
+  if (width < 800) {
+    const edge = await page.locator('#what-he-does').evaluate((element) => element.getBoundingClientRect().left);
+    assert(figures.every(({ x }) => Math.abs(x - edge) < 1), `${name}: stacked stills align with text`);
+    assert.equal(await page.locator('.hero-figure').evaluate((element) => element.getBoundingClientRect().left), edge, `${name}: stacked hero aligns with text`);
   }
   const contrastFailures = await page.evaluate(() => {
     const rgb = (value) => value.match(/[\d.]+/g).map(Number);
@@ -183,6 +225,16 @@ async function scenario({ theme = 'dark', width = 1280, js = true, motion = 'red
   await page.screenshot({ path: screenshot, fullPage: true, animations: 'disabled' });
   report.screenshots.push(screenshot);
   if (name === 'desktop-dark') {
+    // Exercise the entire formerly clipped interval, not just its endpoints.
+    for (let size = 601; size <= 680; size++) {
+      await page.setViewportSize({ width: size, height: 900 });
+      assert(await page.locator('.compatibility').evaluate((element) => {
+        const box = element.getBoundingClientRect();
+        const cells = [...element.querySelectorAll('th,td')];
+        return element.scrollWidth <= element.clientWidth + 1 && box.right <= innerWidth && cells.every((cell) => cell.scrollWidth <= cell.clientWidth + 1);
+      }), `${name}: compatibility must not clip at ${size}px`);
+    }
+    await page.setViewportSize({ width, height: 900 });
     requests.push(...initialResources);
     // Actual initial responses include browser-selected icons and near-viewport lazy images.
     report.firstLoadBytes = requests.reduce((sum, { bytes }) => sum + bytes, 0);
@@ -214,7 +266,8 @@ try {
     await scenario({ theme, width: 360, name: `mobile-${theme}` });
   }
   await scenario({ width: 320, name: 'narrow-320' });
-  for (const width of [600, 799, 800, 899, 900]) {
+  await scenario({ theme: 'light', width: 320, name: 'narrow-320-light' });
+  for (const width of [600, 601, 640, 680, 799, 800, 899, 900, 1024]) {
     await scenario({ width, name: `breakpoint-${width}` });
   }
   await scenario({ js: false, name: 'javascript-disabled' });

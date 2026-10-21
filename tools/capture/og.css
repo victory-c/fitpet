@@ -1,9 +1,10 @@
 html, body { margin: 0; width: 1280px; height: 640px; background: #06140b; color: #e8e2d2; }
-body { font: 24px/1.5 system-ui, sans-serif; }
-main { box-sizing: border-box; width: 1150px; height: 600px; margin: 20px auto; display: flex; align-items: center; gap: 42px; }
-section { flex: 1; }
-.address { font: 19px/1.5 Menlo, Monaco, Consolas, "Liberation Mono", monospace; color: #7de893; }
-h1 { font: 700 49px/1.15 Menlo, Monaco, Consolas, "Liberation Mono", monospace; letter-spacing: -2px; margin: 22px 0; }
-p { color: #c9d1d9; }
-.address { margin-top: 34px; }
-img { width: 360px; height: 492px; object-fit: contain; image-rendering: auto; }
+body { font: 32px/1.35 system-ui, sans-serif; }
+main { box-sizing: border-box; width: 1150px; height: 600px; margin: 20px auto; display: flex; align-items: center; gap: 30px; }
+section { flex: 1; min-width: 0; }
+.address { font: 26px/1.5 Menlo, Monaco, Consolas, "Liberation Mono", monospace; color: #7de893; }
+h1 { font: 700 46px/1.15 Menlo, Monaco, Consolas, "Liberation Mono", monospace; letter-spacing: -2px; margin: 0 0 28px; }
+p { color: #c9d1d9; margin: 0; }
+.address { margin-top: 28px; }
+.poster { width: 440px; height: calc(440px * 620 / 600); flex: none; overflow: hidden; }
+img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: top; }

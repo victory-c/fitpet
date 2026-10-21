@@ -21,11 +21,13 @@ function bannedPattern(phrase) {
     if (word.endsWith("y")) forms.push(word.slice(0, -1) + "ies", word.slice(0, -1) + "ied");
     // These phrase stems need explicit morphology beyond suffix addition:
     // game-changer → game-changing; level up → levelling/leveling up.
-    if (word === "changer") forms.push("changing", "changed", "change", "changes");
+    if (word.endsWith("less")) forms.push(word + "ly");
+    if (word === "changer") forms.push("changing", "changed");
     if (word === "level") forms.push("levelled", "levelling");
     return "(?:" + forms.join("|") + ")";
   };
-  return new RegExp(`(?<![\\p{L}\\p{N}_])${parts.map(inflect).join("[\\s-]+")}(?![\\p{L}\\p{N}_])`, "iu");
+  const pattern = parts.map((word, i) => i === parts.length - 1 && ["in short", "dive in"].includes(phrase) ? word : inflect(word));
+  return new RegExp(`(?<![\\p{L}\\p{N}_])${pattern.join("[\\s-]+")}(?![\\p{L}\\p{N}_])`, "iu");
 }
 function checkCopy(text, tags, owner, add) {
   try {
@@ -33,7 +35,7 @@ function checkCopy(text, tags, owner, add) {
     visible += "\n" + tags.flatMap(({ name: tag, attrs: a }) => [a.alt, a.title, a["aria-label"],
       tag === "meta" && /^(?:description|og:(?:title|description)|twitter:(?:title|description)|.*:image:alt)$/.test(a.property || a.name || "") ? a.content : undefined,
     ]).filter(value => value !== undefined).join("\n");
-    visible = visible.replace(/[\u200b-\u200d\u2060\ufeff]/g, "").replace(/[‘’]/g, "'");
+    visible = visible.normalize("NFKC").replace(/[\p{Cf}\u034f]/gu, "").replace(/[\p{Dash_Punctuation}\u2212]/gu, "-").replace(/[‘’ʼ′]/g, "'");
     for (const phrase of BANNED) if (bannedPattern(phrase).test(visible)) add("R06", `${owner}: banned phrase: ${phrase}`);
   } catch (e) { add("R06", `${owner}: ${e.message}`); }
 }
@@ -79,10 +81,17 @@ function earnestPool() {
 // fetching syntax is rejected rather than guessed. Attributes must be quoted.
 export function parseTags(html) {
   const tags = [];
+  // Preserve the opening-tag API; expose validated head ranges separately.
+  tags.headRanges = [];
+  tags.malformedHead = false;
+  const stack = [];
+  const voids = new Set(["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"]);
+  let headStart = null;
   let i = 0;
   while (i < html.length) {
     const start = html.indexOf("<", i);
     if (start < 0) break;
+    if ((headStart !== null || tags.headRanges.length === 0) && /[^\t\n\f\r ]/.test(html.slice(i, start))) tags.malformedHead = true;
     if (html.startsWith("<!--", start)) {
       const end = html.indexOf("-->", start + 4);
       if (end < 0) throw Error("unterminated comment");
@@ -108,6 +117,20 @@ export function parseTags(html) {
       attrs[key] = attr[3] === undefined ? "" : decodeHTML(attr[3]);
       p += attr[0].length;
     }
+    if (name === "head") {
+      if (!closing) {
+        if (tags.length !== 1 || tags[0]?.name !== "html" || tags.headRanges.length || headStart !== null || stack.join("/") !== "html" || html.slice(start, p).endsWith("/>")) tags.malformedHead = true;
+        headStart = p;
+      } else {
+        if (headStart === null || stack.at(-1) !== "head") tags.malformedHead = true;
+        else tags.headRanges.push({ start: headStart, end: start });
+        headStart = null;
+      }
+    } else if (headStart !== null && !["meta", "link", "title", "style", "script"].includes(name)) tags.malformedHead = true;
+    if (closing) {
+      if (stack.at(-1) === name) stack.pop();
+      else if (["html", "head", "body"].includes(name) || headStart !== null) tags.malformedHead = true;
+    } else if (!voids.has(name) && !["script", "style", "textarea", "title"].includes(name)) stack.push(name);
     if (!closing) tags.push({ name, attrs, start, end: p });
     i = p;
     if (!closing && ["script", "style", "textarea", "title"].includes(name)) {
@@ -118,6 +141,7 @@ export function parseTags(html) {
       i = end.lastIndex;
     }
   }
+  if (headStart !== null || tags.headRanges.length !== 1) tags.malformedHead = true;
   return tags;
 }
 
@@ -192,7 +216,7 @@ export function checkSite(site, { tools = HERE } = {}) {
     const text = fs.readFileSync(path.join(site, name), "utf8");
     if (name.endsWith(".html")) {
       let tags;
-      try { tags = parseTags(text); } catch (e) { add("R04", `${name}: controlled markup: ${e.message}`); continue; }
+      try { tags = parseTags(text); } catch (e) { add("R04", `${name}: controlled markup: ${e.message}`); add("R11", `${name}: cannot validate head/CSP in malformed markup`); continue; }
       for (const { name: tag, attrs: a, body } of tags) {
         if (["base", "iframe", "object", "embed", "form", "style", "svg", "math"].includes(tag) || Object.keys(a).some(k => /^on/.test(k) || ["style", "srcdoc", "ping", "background", "action", "formaction", "manifest", "xlink:href", "data", "codebase", "archive", "imagesrcset", "imagesizes"].includes(k))) add("R04", `${name}: unsupported resource-bearing markup ${tag}`);
         if (tag === "script" && (!a.src || body?.trim())) add("R04", `${name}: inline script forbidden`);
@@ -215,11 +239,23 @@ export function checkSite(site, { tools = HERE } = {}) {
         if (Object.keys(a).some(k => /(?:src|href|url|srcset)$/.test(k) && !["src", "href", "srcset"].includes(k) && !k.startsWith("data-"))) add("R04", `${name}: unknown URL attribute`);
       }
       checkCopy(text, tags, name, add);
-      if (["index.html", "404.html"].includes(name)) {
+      {
         const policies = tags.filter(t => t.name === "meta" && t.attrs["http-equiv"]?.toLowerCase() === "content-security-policy");
         const resource = tags.find(t => ["link", "script", "img", "video", "audio", "source", "track", "iframe", "object", "embed", "style", "input"].includes(t.name) || Object.keys(t.attrs).some(k => ["src", "srcset", "poster", "background"].includes(k)));
-        if (policies.length !== 1 || policies[0].attrs.content !== CSP || resource && policies[0].start > resource.start) add("R11", `${name}: exact PRD10 CSP required once before any resource tag`);
+        const head = tags.headRanges[0];
+        if (tags.malformedHead || policies.length !== 1 || policies[0].attrs.content !== CSP || !head || policies[0].start < head.start || policies[0].end > head.end || resource && policies[0].start > resource.start) add("R11", `${name}: exact PRD10 CSP required once inside a valid head before any resource tag`);
       }
+      try {
+        const pool = earnestPool();
+        for (const { name: tag, attrs: a } of tags) {
+          const values = [a.alt, tag === "meta" && ["og:image:alt", "twitter:image:alt"].includes(a.property || a.name) ? a.content : undefined];
+          for (const value of values.filter(v => v !== undefined)) {
+            const quotes = [...value.matchAll(/“([^“”]*)”/gu)];
+            if ((value.match(/[“”]/gu) || []).length !== quotes.length * 2) add("R09", `${name}: malformed quoted image alt`);
+            for (const quote of quotes) if (!pool.has(quote[1])) add("R09", `${name}: image alt is not an exact earnest quip: ${quote[1]}`);
+          }
+        }
+      } catch (e) { add("R09", `${name}: ${e.message}`); }
       if (name === "index.html") {
         const blocks = [...text.matchAll(/<pre\b[^>]*\bid=["']quick-start-code["'][^>]*>\s*<code\b[^>]*>([\s\S]*?)<\/code>\s*<\/pre>/g)];
         try { if (blocks.length !== 1 || decodeHTML(blocks[0][1]) !== expectedQuickStart()) add("R08", "quick-start must match README exactly (clone URL excepted)"); } catch (e) { add("R08", e.message); }

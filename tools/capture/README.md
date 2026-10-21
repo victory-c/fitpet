@@ -8,10 +8,11 @@ never imports the CLI, reads pet/settings state, or changes app sources.
 Run these commands from the repository root with fresh `out/renderer/` from the
 current approved baseline build. Prerequisites are Node, ffmpeg on PATH, the
 existing capture dependencies, installed Menlo, and **already cached
-Chromium/headless-shell revision 1243** (Chromium 153.0.8010.12). Do not run an
-installer or download a browser. Missing cache or launch failure means stop.
+Chromium/headless-shell revision 1243** (Chromium 153.0.8010.12). Do not run a
+browser installer or download a browser. Missing cache or launch failure means stop.
 
 ```sh
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm ci --prefix tools/capture
 node tools/capture/capture.mjs
 # Optional equivalent explicit destination:
 node tools/capture/capture.mjs --output site/assets
@@ -22,7 +23,7 @@ Dimensions, sizes, decoded pixel equality, fixture assertions, frame assertions,
 fonts/environment, and browser/resource errors are validated **before** any
 published file is copied into `site/assets/`. A validation failure therefore
 leaves published assets and `capture-report.json` unchanged. After validation,
-publication copies the approved inventory, removes obsolete `og-v1.png`, and
+publication copies the approved inventory, removes obsolete `og-v1.png` and `og-v2.png`, and
 copies the report. This is a validation gate, not a filesystem transaction:
 an operating-system failure during copying can still interrupt publication.
 
@@ -88,35 +89,59 @@ without changing image data. Still target: ≤55,000 bytes; hard maximum for eac
 image: 80,000 bytes. IHDR dimensions and final file hashes are asserted.
 
 `og.html`/`og.css` render at 1280 × 640, device scale factor 1, with central
-1150 × 600 content, local hero output, and system fonts including Menlo. Only
-the approved H1, Garmin/coding sentence, and URL appear. These source templates
+1150 × 600 content, local hero output, and system fonts including Menlo. The H1
+is exactly “FitPet: a desktop pet that grows when you work out.” The tagline
+“Grows from Garmin workouts. Nudges you after an hour of Claude Code or Cline.”
+uses 32px text; “victory-c.github.io/fitpet” uses 26px text. Text bounds are asserted.
+An object-fit container shows the real poster's top 600 × 620 region, excluding
+renderer labels while retaining the bubble “All tests passing. Lovely work.”
+and crab. No extra copy is added. These source templates
 are capture-only, not published.
 
 Icons derive from the **actual hero canvas**, not a substitute drawing. The
 adult flat shell source anchor is [15,4], grid 34 × 24 logical pixels, SCALE 4.
 At poster time quantized breathing translation is zero. Crop `136:96:60:16`
-from the 256 px source, pad to 144 × 144 with `#06140b`, then nearest-neighbor
-scale to 32 × 32 / 180 × 180. This preserves screen, bezel, and monitor neck.
+from the 256 px source **after ffmpeg alpha compositing over `#06140b`**, pad to
+144 × 144 with `#06140b`, then nearest-neighbor
+scale to 32 × 32 / 180 × 180. Decoding each icon to RGBA must show alpha255
+everywhere and a corner pixel `[6,20,11,255]`. Simply discarding alpha is not
+compositing and would leave incorrect holes. This preserves screen, bezel, and monitor neck.
 Manually review icons and OG after capture; geometry changes require reviewing
 the crop, never inventing shell art.
 
 Published inventory: `hero-poster.png`, `touch-grass.png`, `debt.png`,
-`snoozed.png`, `og-v2.png`, `favicon-32.png`, `apple-touch-icon.png`.
+`snoozed.png`, `og-v3.png`, `favicon-32.png`, `apple-touch-icon.png`.
 
 ## Deterministic rerun
 
 From the repository root, compare every published PNG and the report:
 
 ```sh
-shasum -a 256 site/assets/*.png tools/capture/capture-report.json > /tmp/fitpet-before.sha256
+scratch=$(mktemp -d)
+shasum -a 256 site/assets/*.png tools/capture/capture-report.json > "$scratch/before.sha256"
 node tools/capture/capture.mjs
-shasum -a 256 site/assets/*.png tools/capture/capture-report.json > /tmp/fitpet-after.sha256
-diff -u /tmp/fitpet-before.sha256 /tmp/fitpet-after.sha256
+shasum -a 256 site/assets/*.png tools/capture/capture-report.json > "$scratch/after.sha256"
+diff -u "$scratch/before.sha256" "$scratch/after.sha256"
+rm -r "$scratch"
 ```
 
 An empty diff is required. After the reviewed outputs have been committed,
 repeat capture and check `git status --short`: capture must introduce no changes.
 Do not include working-tree status, timestamps, or rerun counters in the report.
+
+## Browser verification
+
+From the repository root, with the local server already serving the site at
+`http://127.0.0.1:8000/fitpet/`, run:
+
+```sh
+review_output=$(mktemp -d)
+node tools/capture/browser-check.mjs --base-url http://127.0.0.1:8000/fitpet/ --output-dir "$review_output"
+printf 'Browser evidence: %s\n' "$review_output"
+```
+
+The allocated output must be outside both the working repository and its linked
+repository. The checker verifies the physical destination, including symlinks.
 
 ## Manual configuration-drift checklist
 

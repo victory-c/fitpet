@@ -163,9 +163,20 @@ try {
   }
   // Source shell rectangle from SHELL_FLAT anchor[15,4], 34 columns / 24 rows,
   // SCALE4, at poster time breatheDy=0. Pad around that actual canvas crop.
+  const flattened = join(temp, 'canvas-opaque.png');
+  ffmpeg(['-i', join(temp, 'canvas.png'), '-filter_complex', 'color=c=0x06140b:s=256x256,format=rgba[bg];[bg][0:v]overlay=shortest=1:format=auto,format=rgba[out]', '-map', '[out]', '-frames:v', '1', flattened]);
+  const decodeRGBA = file => execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', file, '-frames:v', '1', '-f', 'rawvideo', '-pix_fmt', 'rgba', '-']);
+  const assertIconOpaque = file => {
+    const pixels = decodeRGBA(file);
+    assert(pixels.every((byte, i) => i % 4 !== 3 || byte === 255), 'Icon must have alpha255 throughout');
+    assert.deepEqual([...pixels.subarray(0, 4)], [6, 20, 11, 255], 'Icon background must be #06140b');
+  };
+  assertIconOpaque(flattened);
   const shell = 'crop=136:96:60:16,pad=144:144:4:24:color=0x06140b';
-  await png(join(temp, 'canvas.png'), 'favicon-32.png', 32, 32, `${shell},scale=32:32:flags=neighbor`);
-  await png(join(temp, 'canvas.png'), 'apple-touch-icon.png', 180, 180, `${shell},scale=180:180:flags=neighbor`);
+  await png(flattened, 'favicon-32.png', 32, 32, `${shell},scale=32:32:flags=neighbor`);
+  await png(flattened, 'apple-touch-icon.png', 180, 180, `${shell},scale=180:180:flags=neighbor`);
+  for (const name of ['favicon-32.png', 'apple-touch-icon.png']) assertIconOpaque(join(staged, name));
+  report.checks.push({ icons: 'Actual canvas composited over #06140b before cropping; decoded RGBA alpha255 throughout and background pixel #06140b verified.' });
   await cp(join(staged, 'hero-poster.png'), join(served, 'hero-poster.png'));
   await page.setViewportSize({ width: 1280, height: 640 });
   // OG uses DSF1: no DOM text post-upscaling.
@@ -180,11 +191,24 @@ try {
   });
   await og.goto(`${origin}/og.html`, { waitUntil: 'networkidle' });
   await og.evaluate(() => document.fonts.ready);
+  const composition = await og.evaluate(() => {
+    const elements = [...document.querySelectorAll('section, h1, p, .poster')];
+    return {
+      h1: document.querySelector('h1').textContent,
+      taglinePx: parseFloat(getComputedStyle(document.querySelector('p')).fontSize),
+      urlPx: parseFloat(getComputedStyle(document.querySelector('.address')).fontSize),
+      boundsFit: elements.every(el => { const r = el.getBoundingClientRect(); return r.x >= 65 && r.right <= 1215 && r.y >= 20 && r.bottom <= 620 && el.scrollWidth <= el.clientWidth && el.scrollHeight <= el.clientHeight; }),
+      crop: 'Real hero poster top 600x620; bubble and crab only; renderer labels excluded.'
+    };
+  });
+  assert.equal(composition.h1, 'FitPet: a desktop pet that grows when you work out.');
+  assert(composition.taglinePx >= 32 && composition.urlPx >= 26 && composition.boundsFit, 'OG text must fit at approved readable sizes');
+  report.checks.push({ og: composition });
   await og.screenshot({ path: join(temp, 'og.png'), animations: 'disabled' });
-  await png(join(temp, 'og.png'), 'og-v2.png', 1280, 640);
+  await png(join(temp, 'og.png'), 'og-v3.png', 1280, 640);
   assert.deepEqual(external, []); assert.deepEqual(errors, []); assert.deepEqual(resourceFailures, []);
   report.checks.push({ externalRequests: external, rendererAndOgErrors: errors, resourceFailures });
-  const inventory = [...names.map(name => name === 'hero' ? 'hero-poster.png' : `${name}.png`), 'favicon-32.png', 'apple-touch-icon.png', 'og-v2.png'];
+  const inventory = [...names.map(name => name === 'hero' ? 'hero-poster.png' : `${name}.png`), 'favicon-32.png', 'apple-touch-icon.png', 'og-v3.png'];
   assert.deepEqual(report.assets.map(asset => asset.name), inventory);
   for (const asset of report.assets) assert.equal(hash(await readFile(join(staged, asset.name))), asset.sha256);
   const reportBytes = JSON.stringify(report, null, 2) + '\n';
@@ -193,6 +217,7 @@ try {
   await mkdir(output, { recursive: true });
   for (const name of inventory) await cp(join(staged, name), join(output, name));
   await rm(join(output, 'og-v1.png'), { force: true });
+  await rm(join(output, 'og-v2.png'), { force: true });
   await cp(join(temp, 'capture-report.json'), join(here, 'capture-report.json'));
   console.log(JSON.stringify(report, null, 2));
 } finally {
