@@ -45,31 +45,31 @@
       "name": "favicon-32.png",
       "width": 32,
       "height": 32,
-      "bytes": 269,
+      "bytes": 246,
       "target55000": true,
       "prediction": "none",
-      "pixelFormat": "rgba",
-      "sha256": "f818e74ad52d1dbd652bc0eb7345e0dc63cbceab719b4ddb033bd7423c4110f2"
+      "pixelFormat": "rgb24",
+      "sha256": "0ea3f509c0d1eda6f069996eaea35fd3958fc3d562553e58594a9b50fef044c4"
     },
     {
       "name": "apple-touch-icon.png",
       "width": 180,
       "height": 180,
-      "bytes": 1359,
-      "target55000": true,
-      "prediction": "none",
-      "pixelFormat": "rgba",
-      "sha256": "f8138fa0c93cd58ad8e56a846827e9d199575506f727d6e31b53406dbd360c90"
-    },
-    {
-      "name": "og-v2.png",
-      "width": 1280,
-      "height": 640,
-      "bytes": 48246,
+      "bytes": 1241,
       "target55000": true,
       "prediction": "none",
       "pixelFormat": "rgb24",
-      "sha256": "089b51f1b1b676431509b9004043a615d1102aca66455ecbe4722ef264101aa8"
+      "sha256": "affeedb7c878f12ac2fe4f2e9a42ba314288c0481b7cd63cdab87e2de4216f7d"
+    },
+    {
+      "name": "og-v3.png",
+      "width": 1280,
+      "height": 640,
+      "bytes": 50697,
+      "target55000": true,
+      "prediction": "none",
+      "pixelFormat": "rgb24",
+      "sha256": "286feee2b6d2ba25d35ad836a1a5818496c1c6e580cc5860a6bc1c278cfb26d7"
     }
   ],
   "checks": [
@@ -112,6 +112,18 @@
       "bubble": "exact",
       "canvasPixels": 21368,
       "animatedCanvas": true
+    },
+    {
+      "icons": "Actual canvas composited over #06140b before cropping; decoded RGBA alpha255 throughout and background pixel #06140b verified."
+    },
+    {
+      "og": {
+        "h1": "FitPet: a desktop pet that grows when you work out.",
+        "taglinePx": 32,
+        "urlPx": 26,
+        "boundsFit": true,
+        "crop": "Real hero poster top 600x620; bubble and crab only; renderer labels excluded."
+      }
     },
     {
       "externalRequests": [],

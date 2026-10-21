@@ -107,7 +107,44 @@ try {
   html("block boundaries retain phrase spaces", "R06", '<body>', '<body><p>Level</p><p>up</p>');
   run("inline joining detects inflected banned word", "R06", ({ site }) => edit(site, "index.html", '<body>', '<body><p>Boost<em>ed</em> experiences.</p>'));
   for (const word of ["boosting", "boosts", "boosted", "harnesses", "unlocked", "journeys", "elevating", "supercharged", "empowering", "game changer", "cutting edge", "next level", "level-up", "whether you’re", "bo\u200bosting", "whether you&#x2019;re"]) html(`normalized inflection ${word}`, "R06", '<body>', `<body><p>${word}</p>`);
-  for (const phrase of ["game-changing", "game changing", "game-changed", "game changes", "game-changers", "leveling up", "levelling up", "leveled up", "levelled up", "levels up", "leveling-up", "levelling-up", "leveled-up", "levelled-up", "harnessing", "harnessed", "harnesses"]) html(`explicit morphology ${phrase}`, "R06", '<body>', `<body><p>${phrase}</p>`);
+  for (const phrase of ["game-changing", "game changing", "game-changed", "game-changers", "leveling up", "levelling up", "leveled up", "levelled up", "levels up", "leveling-up", "levelling-up", "leveled-up", "levelled-up", "harnessing", "harnessed", "harnesses"]) html(`explicit morphology ${phrase}`, "R06", '<body>', `<body><p>${phrase}</p>`);
+  for (const phrase of ["ＢＯＯＳＴ", "bo\u00adost", "bo\u061cost", "bo\u034fost", "next‑level", "next－level", "next−level", "whether youʼre", "whether you′re", "effortlessly", "seamlessly", "in short", "dive in"]) html(`Unicode/suffix banned ${phrase}`, "R06", '<body>', `<body><p>${phrase}</p>`);
+  for (const phrase of ["ＢＯＯＳＴＥＲ", "bo\u00adoster", "bo\u061coster", "bo\u034foster", "next‑leveler", "next－leveler", "next−leveler", "whether youʼreal", "whether you′real", "effortlesslyish", "seamlesslyish", "boostly", "boostlyish", "in shorts", "in shorted", "in shorting", "dive ins", "dive ined", "dive ining", "game change", "game changes", "gamechange", "gamechanges"]) html(`Unicode/suffix boundary allowed ${phrase}`, null, '<body>', `<body><p>${phrase}</p>`);
+  for (const file of ["index.html", "404.html", "nested/extra.html"]) {
+    const setup = site => { if (file.includes('/')) { fs.mkdirSync(path.join(site, 'nested')); fs.writeFileSync(path.join(site, file), `<!doctype html><html><head>${policy}</head><body></body></html>`); } };
+    for (const [label, value, expected] of [
+      ["earnest", "All tests passing. Lovely work.", null],
+      ["concern", "I&apos;m getting worried. A real break would help.", null],
+      ["invented", "All tests passing. Excellent work.", "R09"],
+      ["sarcastic", "Tests passed. Don&apos;t let it go to your head.", "R09"],
+      ["not normalized", "Ａll tests passing. Lovely work.", "R09"],
+      ["extra space", "All tests passing. Lovely work. ", "R09"],
+    ]) for (const kind of ["img", "og:image:alt", "twitter:image:alt"]) run(`${file} ${kind} ${label}`, expected, ({ site }) => {
+      setup(site);
+      const markup = kind === 'img' ? `<img alt="Preview “${value}”!">` : `<meta property="${kind}" content="Preview “${value}”!">`;
+      edit(site, file, '<body>', '<body>' + markup);
+    });
+    run(`${file} every quote validated`, "R09", ({ site }) => { setup(site); edit(site, file, '<body>', '<body><img alt="“All tests passing. Lovely work.” “Invented.”">'); });
+    run(`${file} valid CSP`, null, ({ site }) => setup(site));
+    run(`${file} HTML whitespace before CSP`, null, ({ site }) => { setup(site); edit(site, file, policy, '\t\n\f\r ' + policy); });
+    run(`${file} HTML whitespace and comments before head`, null, ({ site }) => { setup(site); edit(site, file, '<head>', '\t\n\f\r <!-- harmless --> <head>'); });
+    for (const [label, from, to] of [
+      ['literal text before head', '<head>', 'TEXT<head>'],
+      ['NBSP before head', '<head>', '\u00a0<head>'],
+      ['BOM before head', '<head>', '\ufeff<head>'],
+      ['literal text before html', '<html', 'TEXT<html'],
+      ['noscript hides CSP', policy, `<noscript>${policy}</noscript>`],
+      ['self-closing noscript hides CSP', policy, `<noscript/>${policy}</noscript>`],
+      ['non-HTML NBSP before CSP', policy, '\u00a0' + policy],
+      ['non-HTML BOM before CSP', policy, '\ufeff' + policy],
+      ['missing CSP', policy, ''], ['duplicate CSP', policy, policy + policy], ['wrong CSP', policy, policy.replace("default-src 'none'", "default-src 'self'")], ['late CSP', policy, '<link rel="canonical" href="https://victory-c.github.io/fitpet/">' + policy],
+      ['no head', '<head>', ''], ['unclosed head', '</head>', ''], ['self-closing head', '<head>', '<head/>'],
+      ['nested head', '<head>', '<head><head>'], ['body before head', '<head>', '<body></body><head>'],
+      ['body CSP before link', `<head>${policy}`, `<head></head><body>${policy}`],
+      ['CSP after head', '</head>', `</head>${policy}`], ['CSP before head', '<head>', `${policy}<head>`],
+      ['body in head', policy, `<div>${policy}</div>`],
+    ]) run(`${file} ${label}`, 'R11', ({ site }) => { setup(site); edit(site, file, from, to); });
+  }
   for (const meta of ["og:image:alt", "twitter:image:alt", "custom:image:alt"]) html(`image alt metadata ${meta}`, "R06", '<body>', `<body><meta property="${meta}" content="Boosted">`);
   run("404 banned copy", "R06", ({ site }) => edit(site, "404.html", 'Back', 'Boosting '));
   run("404 banned metadata", "R06", ({ site }) => edit(site, "404.html", '<head>', '<head><meta name="twitter:image:alt" content="Boosts">'));
