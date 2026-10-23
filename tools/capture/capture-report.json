@@ -45,11 +45,11 @@
       "name": "favicon-32.png",
       "width": 32,
       "height": 32,
-      "bytes": 246,
+      "bytes": 495,
       "target55000": true,
       "prediction": "none",
       "pixelFormat": "rgb24",
-      "sha256": "0ea3f509c0d1eda6f069996eaea35fd3958fc3d562553e58594a9b50fef044c4"
+      "sha256": "89ad5792b81ad7de06c9b0857ced4bbc5468add769d6e1229f5a959c59af1115"
     },
     {
       "name": "apple-touch-icon.png",
