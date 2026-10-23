@@ -119,12 +119,14 @@ try {
       ["sarcastic", "Tests passed. Don&apos;t let it go to your head.", "R09"],
       ["not normalized", "Ａll tests passing. Lovely work.", "R09"],
       ["extra space", "All tests passing. Lovely work. ", "R09"],
-    ]) for (const kind of ["img", "og:image:alt", "twitter:image:alt"]) run(`${file} ${kind} ${label}`, expected, ({ site }) => {
+    ]) for (const kind of ["img", "og:image:alt", "twitter:image:alt"]) for (const [open, close, style] of [["“", "”", "curly"], ["&quot;", "&quot;", "straight"]]) run(`${file} ${kind} ${style} ${label}`, expected, ({ site }) => {
       setup(site);
-      const markup = kind === 'img' ? `<img alt="Preview “${value}”!">` : `<meta property="${kind}" content="Preview “${value}”!">`;
+      const markup = kind === 'img' ? `<img alt="Preview ${open}${value}${close}!">` : `<meta property="${kind}" content="Preview ${open}${value}${close}!">`;
       edit(site, file, '<body>', '<body>' + markup);
     });
     run(`${file} every quote validated`, "R09", ({ site }) => { setup(site); edit(site, file, '<body>', '<body><img alt="“All tests passing. Lovely work.” “Invented.”">'); });
+    run(`${file} every straight quote validated`, "R09", ({ site }) => { setup(site); edit(site, file, '<body>', '<body><img alt="&quot;All tests passing. Lovely work.&quot; &quot;Invented.&quot;">'); });
+    for (const [label, alt] of [["unbalanced straight", "&quot;All tests passing. Lovely work."], ["mixed curly/straight", "“All tests passing. Lovely work.&quot;"]]) run(`${file} ${label} quote`, "R09", ({ site }) => { setup(site); edit(site, file, '<body>', `<body><img alt="${alt}">`); });
     run(`${file} valid CSP`, null, ({ site }) => setup(site));
     run(`${file} HTML whitespace before CSP`, null, ({ site }) => { setup(site); edit(site, file, policy, '\t\n\f\r ' + policy); });
     run(`${file} HTML whitespace and comments before head`, null, ({ site }) => { setup(site); edit(site, file, '<head>', '\t\n\f\r <!-- harmless --> <head>'); });

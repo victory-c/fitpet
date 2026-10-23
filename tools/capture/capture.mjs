@@ -173,7 +173,7 @@ try {
   };
   assertIconOpaque(flattened);
   const shell = 'crop=136:96:60:16,pad=144:144:4:24:color=0x06140b';
-  await png(flattened, 'favicon-32.png', 32, 32, `${shell},scale=32:32:flags=neighbor`);
+  await png(flattened, 'favicon-32.png', 32, 32, `${shell},scale=32:32:flags=area`);
   await png(flattened, 'apple-touch-icon.png', 180, 180, `${shell},scale=180:180:flags=neighbor`);
   for (const name of ['favicon-32.png', 'apple-touch-icon.png']) assertIconOpaque(join(staged, name));
   report.checks.push({ icons: 'Actual canvas composited over #06140b before cropping; decoded RGBA alpha255 throughout and background pixel #06140b verified.' });

@@ -5,11 +5,10 @@ never imports the CLI, reads pet/settings state, or changes app sources.
 
 ## Reproduce
 
-Run these commands from the repository root with fresh `out/renderer/` from the
-current approved baseline build. Prerequisites are Node, ffmpeg on PATH, the
-existing capture dependencies, installed Menlo, and **already cached
-Chromium/headless-shell revision 1243** (Chromium 153.0.8010.12). Do not run a
-browser installer or download a browser. Missing cache or launch failure means stop.
+Run these commands from the repository root after `npm run app:build`, so
+`out/renderer/` is fresh. Prerequisites are Node, ffmpeg on PATH, installed
+Menlo, and **Chromium/headless-shell revision 1243** (Chromium 153.0.8010.12),
+which `npx --prefix tools/capture playwright install chromium` provides.
 
 ```sh
 PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm ci --prefix tools/capture
@@ -102,8 +101,9 @@ Icons derive from the **actual hero canvas**, not a substitute drawing. The
 adult flat shell source anchor is [15,4], grid 34 × 24 logical pixels, SCALE 4.
 At poster time quantized breathing translation is zero. Crop `136:96:60:16`
 from the 256 px source **after ffmpeg alpha compositing over `#06140b`**, pad to
-144 × 144 with `#06140b`, then nearest-neighbor
-scale to 32 × 32 / 180 × 180. Decoding each icon to RGBA must show alpha255
+144 × 144 with `#06140b`, then area-average to 32 × 32 and nearest-neighbor
+scale to 180 × 180. 144 → 32 is 4.5:1, so nearest-neighbor would drop
+checkmark pixels from the favicon. Decoding each icon to RGBA must show alpha255
 everywhere and a corner pixel `[6,20,11,255]`. Simply discarding alpha is not
 compositing and would leave incorrect holes. This preserves screen, bezel, and monitor neck.
 Manually review icons and OG after capture; geometry changes require reviewing
@@ -131,8 +131,14 @@ Do not include working-tree status, timestamps, or rerun counters in the report.
 
 ## Browser verification
 
-From the repository root, with the local server already serving the site at
-`http://127.0.0.1:8000/fitpet/`, run:
+Serve the site under `/fitpet/`, as Pages does:
+
+```sh
+srv=$(mktemp -d); ln -s "$PWD/site" "$srv/fitpet"
+python3 -m http.server 8000 --bind 127.0.0.1 --directory "$srv"
+```
+
+Then, from the repository root in another terminal, run:
 
 ```sh
 review_output=$(mktemp -d)
@@ -140,8 +146,8 @@ node tools/capture/browser-check.mjs --base-url http://127.0.0.1:8000/fitpet/ --
 printf 'Browser evidence: %s\n' "$review_output"
 ```
 
-The allocated output must be outside both the working repository and its linked
-repository. The checker verifies the physical destination, including symlinks.
+The output directory must be outside the repository. The checker resolves
+symlinks and refuses a destination inside it.
 
 ## Manual configuration-drift checklist
 
@@ -152,13 +158,13 @@ For changes to config, renderer, sprites, fonts, fixtures, or capture tools:
   coding thresholds, notification/snooze behavior, and earnest quotation pools.
 - Recheck reaction duration against the fixed clock and 333.4 ms warmup; preserve
   explicit null for the snoozed fixture and exact approved text for others.
-- Rebuild the renderer from the approved baseline before capture; verify the
+- Rebuild the renderer (`npm run app:build`) before capture; verify the
   shell crop against current sprite geometry, scale, and breathing offset.
 - Run capture, inspect all four stills, both icons, and OG, then run the site
   checker and browser verification against the updated assets. Check first-load
   bytes as well as each image's individual size limit.
 - Run the deterministic hash comparison above. Review any environment/font
-  change explicitly, and repeat the clean-tree check after committing elsewhere.
+  change explicitly, and repeat the clean-tree check after committing.
 
 ## Optional loop decision
 

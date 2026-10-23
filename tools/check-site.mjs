@@ -243,16 +243,17 @@ export function checkSite(site, { tools = HERE } = {}) {
         const policies = tags.filter(t => t.name === "meta" && t.attrs["http-equiv"]?.toLowerCase() === "content-security-policy");
         const resource = tags.find(t => ["link", "script", "img", "video", "audio", "source", "track", "iframe", "object", "embed", "style", "input"].includes(t.name) || Object.keys(t.attrs).some(k => ["src", "srcset", "poster", "background"].includes(k)));
         const head = tags.headRanges[0];
-        if (tags.malformedHead || policies.length !== 1 || policies[0].attrs.content !== CSP || !head || policies[0].start < head.start || policies[0].end > head.end || resource && policies[0].start > resource.start) add("R11", `${name}: exact PRD10 CSP required once inside a valid head before any resource tag`);
+        if (tags.malformedHead || policies.length !== 1 || policies[0].attrs.content !== CSP || !head || policies[0].start < head.start || policies[0].end > head.end || resource && policies[0].start > resource.start) add("R11", `${name}: exact CSP meta required once inside <head> before any resource tag`);
       }
       try {
         const pool = earnestPool();
         for (const { name: tag, attrs: a } of tags) {
           const values = [a.alt, tag === "meta" && ["og:image:alt", "twitter:image:alt"].includes(a.property || a.name) ? a.content : undefined];
           for (const value of values.filter(v => v !== undefined)) {
-            const quotes = [...value.matchAll(/“([^“”]*)”/gu)];
-            if ((value.match(/[“”]/gu) || []).length !== quotes.length * 2) add("R09", `${name}: malformed quoted image alt`);
-            for (const quote of quotes) if (!pool.has(quote[1])) add("R09", `${name}: image alt is not an exact earnest quip: ${quote[1]}`);
+            // Straight "…" segments are quotations too; validate them like “…”.
+            const quotes = [...value.matchAll(/“([^“”"]*)”|"([^“”"]*)"/gu)].map(quote => quote[1] ?? quote[2]);
+            if ((value.match(/[“”"]/gu) || []).length !== quotes.length * 2) add("R09", `${name}: malformed quoted image alt`);
+            for (const quote of quotes) if (!pool.has(quote)) add("R09", `${name}: image alt is not an exact earnest quip: ${quote}`);
           }
         }
       } catch (e) { add("R09", `${name}: ${e.message}`); }
